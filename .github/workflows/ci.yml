@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: proxy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@v6
@@ -43,7 +43,7 @@ jobs:
       run:
         working-directory: admin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
