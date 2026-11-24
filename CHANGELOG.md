@@ -6,6 +6,8 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-24
+
 ### Added
 
 - Broker mode: one `/mcp` endpoint for every account, a key per AI app, read only or read + write
@@ -21,3 +23,6 @@ All notable changes to hydra-mcp are listed here. The format follows
 - Admin page: Home checklist, Connections, Clients (drag-and-drop grants, ready-made setup for
   Claude Code, Cursor and VS Code), Advanced.
 - Router mode: one URL per account, no token storage.
+
+[Unreleased]: https://github.com/lambi702/hydra-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/lambi702/hydra-mcp/releases/tag/v0.1.0
