@@ -27,6 +27,18 @@ export function Clients() {
   const upstreams = useLoad(api.upstreams);
   const tokens = useLoad(api.accountsStatus);
   const keys = useLoad(api.clientsWithKey);
+  const logins = useLoad(api.appLogins);
+  const loginsOf = (clientId: string) => (logins.data ?? []).filter((l) => l.client_id === clientId);
+
+  async function signOut(id: string, name: string) {
+    if (!window.confirm(`Sign ${name} out? It must log in again to use hydra-mcp.`)) return;
+    try {
+      await api.deleteAppLogin(id);
+      await logins.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ client: Client; key: ClientKey | null } | null>(null);
@@ -186,9 +198,19 @@ export function Clients() {
               <header className="client-head">
                 <div>
                   <h3>{c.name}</h3>
-                  <span className={`pill ${keys.data?.includes(c.id) ? "pill-ok" : "pill-warn"}`}>
-                    {keys.data?.includes(c.id) ? "key set" : "no key yet"}
-                  </span>
+                  {(keys.data?.includes(c.id) || loginsOf(c.id).length === 0) && (
+                    <span className={`pill ${keys.data?.includes(c.id) ? "pill-ok" : "pill-warn"}`}>
+                      {keys.data?.includes(c.id) ? "key set" : "no key yet"}
+                    </span>
+                  )}
+                  {loginsOf(c.id).map((l) => (
+                    <span key={l.id} className="pill pill-ok" title={`via ${l.redirect_uris[0] ?? "OAuth"}`}>
+                      {l.app_name} signed in
+                      <button className="chip-x" aria-label={`Sign ${l.app_name} out`} onClick={() => void signOut(l.id, l.app_name)}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
                 </div>
                 <div className="actions">
                   <button className={keys.data?.includes(c.id) ? "" : "primary"} onClick={() => void newKey(c)}>
@@ -399,8 +421,31 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
   const claude = `claude mcp add --transport http hydra ${created.endpoint} --header "Authorization: ${auth}"`;
   const cursor = JSON.stringify({ mcpServers: { hydra: { url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
   const vscode = JSON.stringify({ servers: { hydra: { type: "http", url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
+  const desktop = JSON.stringify(
+    {
+      mcpServers: {
+        hydra: {
+          command: created.bridge_command ?? "hydra-mcp",
+          args: ["bridge"],
+          env: { HYDRA_MCP_KEY: created.key, HYDRA_MCP_URL: created.endpoint },
+        },
+      },
+    },
+    null,
+    2,
+  );
   const lower = client.name.toLowerCase();
-  const order = lower.includes("cursor") ? ["cursor", "claude", "vscode"] : lower.includes("vs") ? ["vscode", "claude", "cursor"] : ["claude", "vscode", "cursor"];
+  const base = ["claude", "desktop", "web", "vscode", "cursor"];
+  const first = lower.includes("cursor")
+    ? "cursor"
+    : lower.includes("vs")
+      ? "vscode"
+      : lower.includes("desktop")
+        ? "desktop"
+        : lower.includes("claude.ai") || lower.includes("web")
+          ? "web"
+          : "claude";
+  const order = [first, ...base.filter((k) => k !== first)];
   const snippets: Record<string, { label: string; where: string; text: string }> = {
     claude: {
       label: "Claude Code",
@@ -416,6 +461,19 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
       label: "Cursor",
       where: "Paste into ~/.cursor/mcp.json (everywhere) or .cursor/mcp.json (this project), then enable 'hydra' in Settings, MCP.",
       text: cursor,
+    },
+    desktop: {
+      label: "Claude Desktop",
+      where:
+        "Claude Desktop, Settings, Developer, Edit Config: merge this into claude_desktop_config.json, save, then quit and reopen Claude Desktop. It runs locally, no tunnel needed; keep hydra-mcp running.",
+      text: desktop,
+    },
+    web: {
+      label: "claude.ai",
+      where: created.external_endpoint
+        ? "claude.ai, Settings, Connectors, Add custom connector: paste this URL, leave the OAuth fields empty, then Connect. On hydra-mcp's page, pick this client and type your admin token. No key needed: you can ignore the one above."
+        : "claude.ai connects from Anthropic's servers, so it needs hydra-mcp on a public HTTPS URL (a tunnel) and HYDRA_MCP_EXTERNAL_URL set to it. See docs/clients/claude-ai.md, then come back here.",
+      text: created.external_endpoint ?? "HYDRA_MCP_EXTERNAL_URL=https://<your tunnel host>",
     },
     other: {
       label: "Other app",

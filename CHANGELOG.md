@@ -6,6 +6,18 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- claude.ai and Claude Desktop custom connectors: hydra-mcp is now also an OAuth server for apps
+  (protected resource and server metadata, dynamic registration, consent page bound to a
+  hydra-mcp client, PKCE, rotating refresh tokens with reuse detection, revocation). Apps
+  signed in this way show on their client card and can be signed out.
+- `HYDRA_MCP_EXTERNAL_URL` for a tunnel: only `/mcp` and the app login are served under it; the
+  admin page and API stay local-only.
+- `hydra-mcp bridge`: a stdio relay for Claude Desktop's config file, no tunnel needed. The
+  admin page's setup now has *Claude Desktop* and *claude.ai* tabs.
+- Guides: `docs/clients/claude-desktop.md`, `docs/clients/claude-ai.md`.
+
 ## [0.1.0] - 2026-11-24
 
 ### Added

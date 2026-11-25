@@ -24,6 +24,7 @@ Everything lives in the data directory (`~/.hydra-mcp`, created with mode `0700`
 | OAuth client secrets you pasted, or DCR secrets | `hydra-mcp.sqlite3`, table `upstream_oauth` | AES-256-GCM, key in `vault.key` |
 | Pasted personal tokens (PAT, API keys) | same as upstream tokens | AES-256-GCM |
 | Client keys (`hmcp_…`) | `hydra-mcp.sqlite3`, table `clients` | SHA-256 hash only; the key is shown once |
+| App access and refresh tokens (`hmcp_at_…`, `hmcp_rt_…`) | table `oauth_grants` | SHA-256 hash only |
 | Vault key | `vault.key` | 32 random bytes, file mode `0600` |
 | Admin token | `admin_token` (unless set by environment) | file mode `0600` |
 | Account names, identities, URLs, grants | `hydra-mcp.sqlite3` | plain text |
@@ -46,7 +47,8 @@ silently granting that account's access.
 | Endpoint | Who calls it | Authentication |
 | --- | --- | --- |
 | `/admin/` and `/admin/api/*` | you, in the browser | admin token as `Authorization: Bearer`, compared in constant time |
-| `/mcp` | your AI apps | client key `hmcp_…`, looked up by SHA-256 |
+| `/mcp` | your AI apps | client key `hmcp_…` or OAuth access token `hmcp_at_…`, looked up by SHA-256 |
+| `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/.well-known/*` | apps that sign in with OAuth (claude.ai) | open registration; approving a login needs the admin token |
 | `/oauth/callback` | the provider, through your browser | single-use `state` (10 minutes) bound to a PKCE verifier |
 | `/a/{account}/mcp` (router mode) | your AI apps | none at the proxy; the upstream checks the app's own token |
 
@@ -65,6 +67,38 @@ output to a file): treat it like a password.
   from what the server advertises. `offline_access` is added when supported, for refresh tokens.
 - The callback URL is fixed: `<public URL>/oauth/callback`. Register exactly that URL at
   providers that need a manual OAuth app, with no wildcard.
+
+## hydra-mcp as an OAuth server for apps
+
+claude.ai and Claude Desktop custom connectors cannot send a key, so hydra-mcp also implements
+the MCP authorization flow toward apps. It is a separate relationship from its logins at
+providers: an app's token only ever opens hydra-mcp's `/mcp`, never a provider.
+
+- Registration (RFC 7591) is open, as the MCP spec expects. Redirect URIs must be `https`,
+  loopback `http` or an app scheme; at most 500 registrations, and the ones never used are
+  forgotten after a day.
+- `/oauth/authorize` shows a consent page (no framing, no referrer). Approving needs the admin
+  token: someone who finds your public address can register an app, not finish a login. 10
+  wrong tokens in 10 minutes lock the form for a while. Unknown apps or redirect URIs get an
+  error page, never a redirect.
+- PKCE `S256` is required; codes are single use and live 2 minutes.
+- Access tokens live 1 hour. Refresh tokens live 30 days and rotate at every use; the previous
+  one presented again revokes the whole login (OAuth 2.1 reuse detection).
+- Each login is bound to one hydra-mcp client: its grants apply to every call, and the admin
+  page can sign the app out.
+
+## The external URL
+
+With `HYDRA_MCP_EXTERNAL_URL` set, a tunnel makes hydra-mcp reachable from the internet. A tunnel
+client runs on your machine, so tunneled requests arrive from `127.0.0.1`. hydra-mcp recognizes
+them by their `Host` (the public name) or the forwarding headers tunnels add (`X-Forwarded-For`,
+`Forwarded`, `CF-Connecting-IP`, `X-Real-IP`, `Tailscale-Funnel-Request`), and serves them only
+`/mcp`, `/oauth/register|authorize|token|revoke`, `/.well-known/oauth-*` and `/healthz`. The admin
+page and API, provider callbacks and router mode answer 404, even with the admin token.
+
+What crosses the tunnel provider: MCP traffic (tool calls and results), app tokens, and the admin
+token typed on the consent page. TLS ends at the tunnel provider (Tailscale Funnel ends it on
+your machine). Prefer a tunnel you trust with that content.
 
 ## Threat model
 
@@ -91,9 +125,10 @@ output to a file): treat it like a password.
   accounts and tools are reachable; it does not inspect content.
 - The upstream servers themselves and their tool annotations: a server that marks a write tool
   `readOnlyHint: true` defeats the *read only* mode for that tool.
-- Exposing the proxy to a network. It is designed for `127.0.0.1`. If you bind it elsewhere, put
-  it behind TLS and a firewall, and know that anyone who reaches `/a/{account}/mcp` can use
-  router mode.
+- Exposing the proxy to a network by binding it elsewhere than `127.0.0.1`. Use a tunnel and
+  `HYDRA_MCP_EXTERNAL_URL` instead, which keeps the admin surface local. If you bind it
+  elsewhere anyway, put it behind TLS and a firewall, and know that anyone who reaches
+  `/a/{account}/mcp` can use router mode.
 
 ## Hardening checklist
 

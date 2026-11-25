@@ -124,7 +124,9 @@ proxy/src/hydra_mcp/
 │   ├── setup.py        one-time OAuth app guides (Google, GitHub, Asana, generic)
 │   ├── upstream.py     MCP client toward upstreams (Streamable HTTP, sessions, SSE)
 │   ├── aggregator.py   merges tools, applies grants, routes calls
-│   └── endpoint.py     the /mcp endpoint apps connect to
+│   └── endpoint.py     the /mcp endpoint apps connect to (client key or OAuth token)
+├── clientauth.py       OAuth server for apps: metadata, DCR, consent, tokens
+├── bridge.py           `hydra-mcp bridge`: stdio relay to /mcp (Claude Desktop)
 ├── router/             router mode: passthrough and discovery rewriting
 └── admin/api.py        JSON API behind the admin page
 admin/src/              the admin page (React + Vite)

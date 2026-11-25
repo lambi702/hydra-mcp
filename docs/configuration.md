@@ -9,13 +9,16 @@ proxy`). A template is in [`.env.example`](../.env.example).
 | `HYDRA_MCP_HOST` | `127.0.0.1` | Interface to listen on. Keep the loopback default unless you know why not (see [security](security.md)). |
 | `HYDRA_MCP_PORT` | `8765` | Port. |
 | `HYDRA_MCP_PUBLIC_URL` | `http://127.0.0.1:8765` | The URL your apps and browser use to reach the proxy. It builds the OAuth callback (`<public URL>/oauth/callback`) and the router-mode resources, so it must match exactly what you register at providers and paste into apps. Change it together with the port. |
+| `HYDRA_MCP_EXTERNAL_URL` | empty | Public HTTPS address of this proxy (a tunnel), for apps that connect from their own servers: claude.ai, Claude Desktop custom connectors. Only `/mcp` and the app login (`/oauth/*`, `/.well-known/*`) answer there. See [claude.ai](clients/claude-ai.md). |
 | `HYDRA_MCP_DATA_DIR` | `~/.hydra-mcp` | Database, vault key and admin token. |
 | `HYDRA_MCP_ADMIN_TOKEN` | generated | Fixed admin token. When empty, one is generated on first start and kept in `<data dir>/admin_token`. |
 | `HYDRA_MCP_ADMIN_DIST` | `admin/dist` of the checkout | Built admin page to serve at `/admin/`. |
 | `HYDRA_MCP_UPSTREAM_TIMEOUT_S` | `300` | Timeout for calls to upstream servers, in seconds. |
 
-Command-line flags: `hydra-mcp serve [--host H] [--port P] [--reload]` and `hydra-mcp
-admin-token` (prints the admin token).
+Command-line flags: `hydra-mcp serve [--host H] [--port P] [--reload]`, `hydra-mcp
+admin-token` (prints the admin token) and `hydra-mcp bridge [--url URL]` (a stdio MCP server
+relaying to a running hydra-mcp, for [Claude Desktop](clients/claude-desktop.md); reads
+`HYDRA_MCP_KEY` and `HYDRA_MCP_URL`).
 
 ## Changing the port
 
