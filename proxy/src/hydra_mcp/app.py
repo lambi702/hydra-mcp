@@ -22,6 +22,7 @@ from hydra_mcp.broker.aggregator import Aggregator
 from hydra_mcp.broker.endpoint import BrokerEndpoint
 from hydra_mcp.broker.identity import IdentityProbe
 from hydra_mcp.broker.oauth import OAuthBroker, OAuthError
+from hydra_mcp.broker.stdio import StdioPool
 from hydra_mcp.broker.upstream import UpstreamClient
 from hydra_mcp.router import Router
 from hydra_mcp.settings import Settings
@@ -37,6 +38,7 @@ class Services:
     router: Router
     oauth: OAuthBroker
     aggregator: Aggregator
+    stdio: StdioPool | None = None
 
 
 def create_app(
@@ -59,8 +61,15 @@ def create_app(
     oauth = OAuthBroker(
         store, vault, http, router.prm, settings.base_url, IdentityProbe(upstream_client)
     )
-    aggregator = Aggregator(store, oauth, upstream_client)
-    services = Services(store=store, router=router, oauth=oauth, aggregator=aggregator)
+    stdio = (
+        StdioPool(
+            settings.data_dir, timeout_s=settings.upstream_timeout_s, idle_s=settings.stdio_idle_s
+        )
+        if settings.stdio_enabled
+        else None
+    )
+    aggregator = Aggregator(store, oauth, upstream_client, stdio)
+    services = Services(store=store, router=router, oauth=oauth, aggregator=aggregator, stdio=stdio)
     broker = BrokerEndpoint(store, aggregator)
     admin_token = settings.resolved_admin_token
 
@@ -71,6 +80,8 @@ def create_app(
         try:
             yield
         finally:
+            if stdio is not None:
+                await stdio.close()
             await http.aclose()
             await store.close()
 
@@ -92,7 +103,7 @@ def create_app(
             result = await oauth.finish_link(q["state"], q["code"])
         except (OAuthError, LookupError) as exc:
             return _page("Connection failed", str(exc), ok=False, status=400)
-        aggregator.invalidate(result.account.id)
+        await aggregator.invalidate(result.account.id)
         # Back to the admin page, which asks for a friendly name when the account is new.
         query = urlencode({"connected": result.account.id, "new": int(result.created)})
         return RedirectResponse(f"/admin/?{query}", status_code=303)
