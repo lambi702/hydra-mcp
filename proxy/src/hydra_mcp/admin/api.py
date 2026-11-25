@@ -25,7 +25,7 @@ from hydra_mcp.broker.oauth import NeedsManualClient, OAuthError
 from hydra_mcp.broker.setup import setup_guide
 from hydra_mcp.broker.upstream import UpstreamAuthError, UpstreamError
 from hydra_mcp.catalog import load_catalog
-from hydra_mcp.models import Account, Client, Upstream
+from hydra_mcp.models import ENV_NAME_RE, Account, Client, Transport, Upstream
 from hydra_mcp.router import Router, account_resource
 from hydra_mcp.router.discovery import DiscoveryError, fetch_as_metadata
 from hydra_mcp.store import NotFound
@@ -88,7 +88,12 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
 
     async def put_upstream(request: Request) -> Response:
         u = Upstream.model_validate(await request.json())
-        return _json(await store.put_upstream(u))
+        saved = await store.put_upstream(u)
+        if u.is_stdio:  # new command or settings: restart its processes on next use
+            for a in await store.list_accounts():
+                if a.upstream_id == u.id:
+                    await aggregator.invalidate(a.id)
+        return _json(saved)
 
     async def delete_upstream(request: Request) -> Response:
         await store.delete_upstream(request.path_params["id"])
@@ -122,7 +127,7 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
 
     async def delete_account(request: Request) -> Response:
         await store.delete_account(request.path_params["id"])  # its token goes with it
-        aggregator.invalidate(request.path_params["id"])
+        await aggregator.invalidate(request.path_params["id"])
         return Response(status_code=204)
 
     async def accounts_status(request: Request) -> Response:
@@ -255,7 +260,7 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
                 {"error": f"Could not reach {upstream.name} ({type(exc).__name__}): {exc}"}, 502
             )
         result = await oauth.link_token(upstream, token, identity, account_id)
-        aggregator.invalidate(result.account.id)
+        await aggregator.invalidate(result.account.id)
         return JSONResponse(
             {
                 "account": result.account.model_dump(mode="json"),
@@ -264,9 +269,92 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             }
         )
 
+    async def connect_stdio(request: Request) -> Response:
+        """Add an account of a local (stdio) server, or replace its secret settings.
+
+        Body: {"upstream_id"} for a server already added, or {"name", "command", "args",
+        "env", "isolate_home"} for a new one; plus {"alias", "identity", "account_env"} for the
+        account, or {"account_id", "account_env"} to replace an account's settings.
+
+        The server is started once with these settings and must answer tools/list before
+        anything is saved: a wrong command or token never becomes a "connected" account.
+        """
+        if services.stdio is None:
+            return JSONResponse(
+                {"error": "local (stdio) servers are disabled (HYDRA_MCP_STDIO_ENABLED=false)"},
+                403,
+            )
+        body = await request.json()
+        account_env = {str(k).strip(): str(v) for k, v in (body.get("account_env") or {}).items()}
+        bad = [k for k in account_env if not ENV_NAME_RE.match(k)]
+        if bad:
+            return JSONResponse({"error": f"invalid variable names: {', '.join(bad)}"}, 422)
+        account_id = body.get("account_id") or None
+        upstreams = await store.list_upstreams()
+        if account_id:
+            _, upstream = await store.get_account(account_id)
+        elif body.get("upstream_id"):
+            upstream = await store.get_upstream(body["upstream_id"])
+        else:
+            name = (body.get("name") or "").strip()
+            if not name:
+                return JSONResponse({"error": "name is required"}, 422)
+            spec = Upstream(
+                id="new",
+                name=name,
+                transport=Transport.STDIO,
+                command=(body.get("command") or "").strip(),
+                args=[str(a) for a in body.get("args") or []],
+                env={str(k): str(v) for k, v in (body.get("env") or {}).items()},
+                isolate_home=bool(body.get("isolate_home")),
+            )
+            same = next(
+                (
+                    u
+                    for u in upstreams
+                    if u.is_stdio and (u.command, u.args) == (spec.command, spec.args)
+                ),
+                None,
+            )
+            upstream = same or spec.model_copy(update={"id": _free_id(name, upstreams)})
+        if not upstream.is_stdio:
+            return JSONResponse({"error": f"{upstream.name} is not a local (stdio) server"}, 422)
+        try:
+            probe = await services.stdio.probe(upstream, account_env, key=account_id or "new")
+        except UpstreamError as exc:
+            return JSONResponse({"error": f"{upstream.name}: {exc}"}, 400)
+        if all(u.id != upstream.id for u in upstreams):
+            await store.put_upstream(upstream)
+        try:
+            result = await oauth.link_stdio(
+                upstream,
+                account_env,
+                alias=body.get("alias") or "",
+                identity=(body.get("identity") or "").strip(),
+                account_id=account_id,
+            )
+        except OAuthError as exc:
+            return JSONResponse({"error": str(exc)}, 409)
+        await aggregator.invalidate(result.account.id)
+        return JSONResponse(
+            {
+                "account": result.account.model_dump(mode="json"),
+                "created": result.created,
+                "upstream_id": upstream.id,
+                "server": probe["server_info"],
+                "tools": probe["tools"],
+            }
+        )
+
+    async def stdio_status(request: Request) -> Response:
+        """Which local server processes are running now, per account."""
+        if services.stdio is None:
+            return JSONResponse({"enabled": False, "running": {}})
+        return JSONResponse({"enabled": True, "running": services.stdio.running()})
+
     async def unlink_account(request: Request) -> Response:
         await oauth.unlink(request.path_params["id"])
-        aggregator.invalidate(request.path_params["id"])
+        await aggregator.invalidate(request.path_params["id"])
         return Response(status_code=204)
 
     async def upstream_oauth(request: Request) -> Response:
@@ -374,6 +462,8 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
         Route(f"{p}/accounts-status", guarded(accounts_status), methods=["GET"]),
         Route(f"{p}/connect", guarded(connect), methods=["POST"]),
         Route(f"{p}/connect-token", guarded(connect_token), methods=["POST"]),
+        Route(f"{p}/connect-stdio", guarded(connect_stdio), methods=["POST"]),
+        Route(f"{p}/stdio", guarded(stdio_status), methods=["GET"]),
         Route(f"{p}/accounts/{{id}}/identity", guarded(refresh_identity), methods=["POST"]),
         Route(f"{p}/accounts/{{id}}/link", guarded(link_account), methods=["POST"]),
         Route(f"{p}/accounts/{{id}}/link", guarded(unlink_account), methods=["DELETE"]),
@@ -388,6 +478,15 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
         Route(f"{p}/clients", guarded(put_client), methods=["POST", "PUT"]),
         Route(f"{p}/clients/{{id}}", guarded(delete_client), methods=["DELETE"]),
     ]
+
+
+def _free_id(name: str, upstreams: list[Upstream]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:24] or "server"
+    taken = {u.id for u in upstreams}
+    uid, i = base, 2
+    while uid in taken:
+        uid, i = f"{base}-{i}", i + 1
+    return uid
 
 
 async def _as_metadata(router: Router, issuer: str) -> dict:

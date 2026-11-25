@@ -8,6 +8,10 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ### Added
 
+- Local (stdio) servers: hydra-mcp starts a program (`npx …`, `uvx …`) once per account, each
+  copy with its own encrypted secret settings and optionally its own home folder. Started on
+  first use, stopped when idle, restarted after a crash with the program's last output in the
+  error. `HYDRA_MCP_STDIO_ENABLED`, `HYDRA_MCP_STDIO_IDLE_S`.
 - Slack connector (official server at `mcp.slack.com`): app manifest with the callback and user
   scopes, PKCE so a local `http://localhost` callback works, one Slack app per workspace with
   **+ Another workspace**, accounts named after the workspace.

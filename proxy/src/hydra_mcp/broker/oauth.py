@@ -369,16 +369,58 @@ class OAuthBroker:
             await self.store.put_account(account)
         return LinkResult(account=account, created=created)
 
-    async def _account_for(self, upstream: Upstream, identity: str) -> tuple[Account, bool]:
+    async def link_stdio(
+        self,
+        upstream: Upstream,
+        env: dict[str, str],
+        *,
+        alias: str = "",
+        identity: str = "",
+        account_id: str | None = None,
+    ) -> LinkResult:
+        """Store the secret environment of a local (stdio) account, encrypted like a token.
+
+        A stdio account is "connected" when this row exists, exactly like an HTTP account with a
+        token: the rest of the proxy (grants, status, aggregation) does not need to know the
+        difference.
+        """
+        created = False
+        if account_id:
+            account, _ = await self.store.get_account(account_id)
+        else:
+            existing = [a for a in await self.store.list_accounts() if a.upstream_id == upstream.id]
+            wanted = re.sub(r"[^a-z0-9-]+", "-", alias.lower()).strip("-")[:32]
+            if wanted and any(a.alias == wanted for a in existing):
+                raise OAuthError(f"{upstream.name} already has an account named '{wanted}'")
+            account, created = await self._account_for(upstream, identity, alias=wanted)
+        await self._save(account.id, {"access_token": "", "kind": "stdio", "env": env}, None)
+        if identity and identity != account.identity:
+            account = account.model_copy(update={"identity": identity})
+            await self.store.put_account(account)
+        return LinkResult(account=account, created=created)
+
+    async def stdio_env(self, account: Account) -> dict[str, str]:
+        row = await self.store.get_token_row(account.id)
+        if row is None:
+            raise NotLinked(f"account '{account.id}' is not connected")
+        try:
+            bundle = self.vault.open(row["blob"], aad=f"token:{account.id}")
+        except VaultError as exc:
+            raise NotLinked(f"account '{account.id}': stored settings unreadable") from exc
+        return dict(bundle.get("env") or {})
+
+    async def _account_for(
+        self, upstream: Upstream, identity: str, alias: str = ""
+    ) -> tuple[Account, bool]:
         """The account a new login belongs to: the same identity again, or a new account."""
         existing = [a for a in await self.store.list_accounts() if a.upstream_id == upstream.id]
-        if identity:
+        if identity and not alias:
             same = next((a for a in existing if a.identity == identity), None)
             if same is not None:
                 return same, False
         aliases = {a.alias for a in existing}
         ids = {a.id for a in await self.store.list_accounts()}
-        alias = _unique(suggest_alias(identity, len(existing) + 1), aliases)
+        alias = _unique(alias or suggest_alias(identity, len(existing) + 1), aliases)
         account_id = _unique(f"{upstream.id}-{alias}"[:28].rstrip("-"), ids)
         account = Account(id=account_id, upstream_id=upstream.id, alias=alias, identity=identity)
         await self.store.put_account(account)
@@ -458,6 +500,8 @@ class OAuthBroker:
             "identity": (previous or {}).get("identity", ""),
             "kind": tokens.get("kind", "oauth"),
         }
+        if "env" in tokens:
+            bundle["env"] = tokens["env"]
         bundle["identity"] = _identity(tokens) or bundle["identity"]
         await self.store.put_token_row(
             account_id,

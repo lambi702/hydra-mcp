@@ -87,7 +87,13 @@ async def test_catalog_lists_vendor_connectors(proxy):
 async def test_install_connector_creates_upstream(proxy):
     r = await proxy.post("/admin/api/catalog/linear/install", headers=H)
     assert r.status_code == 201
-    assert r.json() == {"id": "linear", "name": "Linear", "url": "https://mcp.linear.app/mcp"}
+    body = r.json()
+    assert {k: body[k] for k in ("id", "name", "url", "transport")} == {
+        "id": "linear",
+        "name": "Linear",
+        "url": "https://mcp.linear.app/mcp",
+        "transport": "http",
+    }
     data = (await proxy.get("/admin/api/catalog", headers=H)).json()
     assert {c["id"]: c for c in data["connectors"]}["linear"]["installed_as"] == "linear"
     r2 = await proxy.post("/admin/api/catalog/notion/install", headers=H, json={"id": "notion-2"})

@@ -122,7 +122,10 @@ multi-user and hosted deployments are on the roadmap, not supported yet.
 | | |
 | --- | --- |
 | Done | Broker mode (one `/mcp`, per-app keys and grants, encrypted vault), router mode, connector library and guides, token login, admin page |
-| Next | Clients log in with OAuth instead of a static key, MCP 2026-07-28 (stateless), stdio servers (one process per account), HTTPS for Claude Desktop and claude.ai |
+| Now | One-line install (`uvx`, `pipx`, Docker), offline demo mode, more connectors tested end to end |
+| Next | stdio servers (one process per account), HTTPS for Claude Desktop and claude.ai, apps log in with OAuth instead of a static key, MCP 2026-07-28 (stateless) |
+
+The full plan, and where to help, is in [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 

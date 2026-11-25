@@ -13,6 +13,8 @@ proxy`). A template is in [`.env.example`](../.env.example).
 | `HYDRA_MCP_ADMIN_TOKEN` | generated | Fixed admin token. When empty, one is generated on first start and kept in `<data dir>/admin_token`. |
 | `HYDRA_MCP_ADMIN_DIST` | `admin/dist` of the checkout | Built admin page to serve at `/admin/`. |
 | `HYDRA_MCP_UPSTREAM_TIMEOUT_S` | `300` | Timeout for calls to upstream servers, in seconds. |
+| `HYDRA_MCP_STDIO_ENABLED` | `true` | Allow [local (stdio) servers](local-servers.md). Turn off where the admin page must not start programs. |
+| `HYDRA_MCP_STDIO_IDLE_S` | `900` | A local server process unused this long is stopped; the next call starts it again. |
 
 Command-line flags: `hydra-mcp serve [--host H] [--port P] [--reload]` and `hydra-mcp
 admin-token` (prints the admin token).
@@ -33,6 +35,7 @@ URL in your apps' MCP config.
 | `hydra-mcp.sqlite3` | servers, accounts, clients, grants, encrypted tokens | yes |
 | `vault.key` | the encryption key for tokens and secrets | yes, separately and safely: without it the tokens are unreadable |
 | `admin_token` | the admin page token | optional |
+| `stdio/<account>/` | home folders of local servers with *separate home folder* | if those servers keep a login there |
 
 To move hydra-mcp to another machine, copy the whole directory with its permissions. To start
 from scratch, stop the proxy and delete it.
