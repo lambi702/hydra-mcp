@@ -120,6 +120,8 @@ export interface Connector {
   docs: string;
   guide: ConnectorGuide | null;
   installed_as: string | null;
+  /** Each workspace needs its own OAuth client, hence its own server row (Slack). */
+  one_client_per_workspace?: boolean;
 }
 
 export interface Catalog {
@@ -197,7 +199,14 @@ export const api = {
   putAccount: (a: Account) => call<Account>("PUT", "/accounts", a),
   deleteAccount: (id: string) => call<void>("DELETE", `/accounts/${id}`),
   accountsStatus: () => call<Record<string, TokenStatus>>("GET", "/accounts-status"),
-  connect: (body: { connector_id?: string; upstream_id?: string; name?: string; url?: string }) =>
+  connect: (body: {
+    connector_id?: string;
+    upstream_id?: string;
+    name?: string;
+    url?: string;
+    /** a second server row with its own OAuth client (another Slack workspace) */
+    new_upstream?: boolean;
+  }) =>
     call<{ authorize_url: string; upstream_id: string }>("POST", "/connect", body),
   connectToken: (body: {
     token: string;

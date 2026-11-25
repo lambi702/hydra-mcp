@@ -76,6 +76,15 @@ class Connector(BaseModel):
     notes: str = ""
     docs: HttpUrl
     guide: Guide | None = None
+    # The provider ties an OAuth client to one workspace (Slack internal apps): each workspace
+    # needs its own client, hence its own upstream row. The admin page then offers
+    # "+ Another workspace", which creates a new upstream instead of reusing this one.
+    one_client_per_workspace: bool = False
+    # Callback host the provider accepts for a plain-http local proxy. Slack only allows http
+    # redirects to `localhost` (as "desktop" redirects of PKCE apps), not to 127.0.0.1.
+    redirect_host: str | None = None
+    # How the provider wants the `scope` parameter joined (Slack: commas).
+    scope_separator: str = " "
 
 
 class Catalog(BaseModel):

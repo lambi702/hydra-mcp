@@ -77,6 +77,19 @@ lists each name with its identity.
 **Claude Desktop or claude.ai cannot connect.** They connect from Anthropic's servers and cannot
 reach `127.0.0.1`. Not supported yet.
 
+## Slack
+
+**`bad_redirect_uri` on Slack's page.** The Redirect URL of the Slack app must be exactly the one
+the wizard shows (`http://localhost:8765/oauth/callback` by default, `localhost` and not
+127.0.0.1), and the app must have PKCE turned on: Slack accepts plain-http callbacks only on
+`localhost` and only from PKCE apps. Behind an https public URL, register that one instead.
+
+**`invalid_team_for_non_distributed_app`.** The Slack app was created in another workspace. Each
+workspace needs its own app: use **+ Another workspace** on the Slack card.
+
+**The consent page says the app needs approval, or tools fail with `not_allowed`.** A workspace
+admin must approve the app and allow MCP clients. Then click **Reconnect**.
+
 ## Still stuck?
 
 [Open an issue](https://github.com/lambi702/hydra-mcp/issues/new?template=bug_report.yml) with

@@ -6,6 +6,22 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Slack connector (official server at `mcp.slack.com`): app manifest with the callback and user
+  scopes, PKCE so a local `http://localhost` callback works, one Slack app per workspace with
+  **+ Another workspace**, accounts named after the workspace.
+- Provider quirks as connector data: `redirect_host`, `scope_separator`,
+  `one_client_per_workspace`. Token responses in Slack's shape (`ok`, `authed_user`) are
+  normalized.
+
+### Changed
+
+- Gmail, GitHub, Notion and Linear guides re-checked against vendor docs (2026-11-25): Gmail
+  client type and tools, GitHub toolset URLs, Notion SSE retirement and limits, Linear
+  read-only URL.
+- After a provider login, the browser returns to the absolute public URL of the admin page.
+
 ## [0.1.0] - 2026-11-24
 
 ### Added

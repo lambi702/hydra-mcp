@@ -34,8 +34,12 @@ export function Connections() {
       c.grants.filter((g) => g.account_id === accountId).map((g) => ({ name: c.name, mode: g.mode })),
     );
 
-  const connectorFor = (upstreamId: string) =>
-    catalog.data?.connectors.find((c) => c.installed_as === upstreamId);
+  // By URL, not by installed_as: a second Slack workspace is another server row, same URL.
+  const trim = (u?: string | null) => (u ?? "").replace(/\/+$/, "");
+  const connectorFor = (upstreamId: string) => {
+    const url = trim(upstreams.data?.find((u) => u.id === upstreamId)?.url);
+    return catalog.data?.connectors.find((c) => c.installed_as === upstreamId || (url && trim(c.url) === url));
+  };
 
   async function connectWithToken(body: { connector_id?: string; upstream_id?: string; account_id?: string }, token: string) {
     const r = await api.connectToken({ ...body, token });
@@ -229,6 +233,15 @@ export function Connections() {
               <button onClick={() => void startConnect({ upstream_id: upstream.id }, upstream.id)}>
                 + Add another account
               </button>
+              {connectorFor(upstream.id)?.one_client_per_workspace && (
+                <button
+                  onClick={() =>
+                    void startConnect({ connector_id: connectorFor(upstream.id)!.id, new_upstream: true }, `${upstream.id}-ws`)
+                  }
+                >
+                  + Another workspace
+                </button>
+              )}
             </div>
           </div>
           <ul className="account-list">

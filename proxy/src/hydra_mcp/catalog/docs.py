@@ -39,19 +39,27 @@ def _connector(c: Connector) -> list[str]:
     if g.accounts:
         out += ["**Several accounts**", "", g.accounts, ""]
     if c.auth == AuthKind.OAUTH_PREREGISTERED:
-        from hydra_mcp.broker.setup import setup_guide  # late: setup imports the catalog
+        from hydra_mcp.broker.setup import callback_for, setup_guide  # late: imports catalog
 
-        guide = setup_guide(Upstream(id=c.id, name=c.name, url=c.url), EXAMPLE_CALLBACK)
+        up = Upstream(id=c.id, name=c.name, url=c.url)
+        callback = callback_for(up, EXAMPLE_CALLBACK)
+        guide = setup_guide(up, callback)
         out += [f"**One-time setup: {guide['client_type']} at {guide['provider']}**", ""]
         for i, step in enumerate(guide["steps"], 1):
             line = f"{i}. **{step['title']}.** {step['text']}"
             if step.get("link"):
                 line += f" [Open]({step['link']})"
             out.append(line)
-            out += [f"   - {f['label']}: `{f['value']}`" for f in step.get("fields", [])]
+            for f in step.get("fields", []):
+                if "\n" in f["value"]:  # a manifest or other block: a fenced code block
+                    out += [f"   - {f['label']}:", "", "     ```json"]
+                    out += [f"     {line}" for line in f["value"].splitlines()]
+                    out += ["     ```", ""]
+                else:
+                    out.append(f"   - {f['label']}: `{f['value']}`")
         out += [
             "",
-            f"`{EXAMPLE_CALLBACK}` is the default; the admin page shows your real callback URL "
+            f"`{callback}` is the default; the admin page shows your real callback URL "
             "(`<public URL>/oauth/callback`).",
             "",
         ]
