@@ -36,6 +36,30 @@ body:
     attributes:
       label: What you know about sign-in
       description: Does it allow dynamic client registration? Accept personal tokens? Need an admin approval or a plan? Anything that tripped you up.
+  - type: textarea
+    id: discovery
+    attributes:
+      label: Discovery output (optional)
+      description: |
+        Helps whoever picks this up. Run these and paste the result (no tokens appear in them):
+        `curl -si -X POST <url> -H 'Content-Type: application/json' -d '{}' | grep -i www-authenticate`,
+        then `curl -s` on the `resource_metadata` URL it names, then on
+        `<authorization server>/.well-known/oauth-authorization-server`.
+      render: text
+  - type: input
+    id: identity
+    attributes:
+      label: How two accounts are told apart
+      description: What differs between two logins of this service (email, workspace, site, organization)? Which tool or API returns it?
+      placeholder: "Workspace name, returned by the `get_workspace` tool"
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: Tested with real accounts (for an existing connector)
+      options:
+        - label: Connected two accounts of this service in hydra-mcp, and they got different names.
+        - label: Called a read tool on each account from an AI app, and each answered with its own data.
+        - label: Logged in again with the first account, and it updated that account instead of adding a third.
   - type: checkboxes
     id: help
     attributes:

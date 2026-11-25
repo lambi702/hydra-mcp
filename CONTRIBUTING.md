@@ -12,6 +12,8 @@ that keep it that way are the easiest to merge.
 - **Improve the docs**: if a step confused you, it will confuse the next person.
 - **Pick an issue** labelled [`good first issue`](https://github.com/lambi702/hydra-mcp/labels/good%20first%20issue)
   or [`help wanted`](https://github.com/lambi702/hydra-mcp/labels/help%20wanted).
+- **Help with the roadmap**: [ROADMAP.md](ROADMAP.md) says what comes next and where a hand helps
+  most.
 
 For anything larger than a bug fix, open an issue first so we can agree on the approach before
 you spend time on it. Security issues never go in a public issue: see [SECURITY.md](SECURITY.md).
