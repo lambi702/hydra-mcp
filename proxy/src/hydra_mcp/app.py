@@ -7,7 +7,7 @@ import html
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from starlette.applications import Starlette
@@ -24,6 +24,7 @@ from hydra_mcp.broker.identity import IdentityProbe
 from hydra_mcp.broker.oauth import OAuthBroker, OAuthError
 from hydra_mcp.broker.stdio import StdioPool
 from hydra_mcp.broker.upstream import UpstreamClient
+from hydra_mcp.clientauth import ClientAuth, Origins
 from hydra_mcp.router import Router
 from hydra_mcp.settings import Settings
 from hydra_mcp.store import Store
@@ -39,6 +40,7 @@ class Services:
     oauth: OAuthBroker
     aggregator: Aggregator
     stdio: StdioPool | None = None
+    external_url: str = ""
 
 
 def create_app(
@@ -69,9 +71,19 @@ def create_app(
         else None
     )
     aggregator = Aggregator(store, oauth, upstream_client, stdio)
-    services = Services(store=store, router=router, oauth=oauth, aggregator=aggregator, stdio=stdio)
-    broker = BrokerEndpoint(store, aggregator)
     admin_token = settings.resolved_admin_token
+    client_auth = ClientAuth(
+        store, Origins(settings.base_url, settings.external_base_url), admin_token
+    )
+    services = Services(
+        store=store,
+        router=router,
+        oauth=oauth,
+        aggregator=aggregator,
+        external_url=settings.external_base_url,
+        stdio=stdio,
+    )
+    broker = BrokerEndpoint(store, aggregator, client_auth)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
@@ -122,6 +134,7 @@ def create_app(
             router.handle_prm,
             methods=["GET"],
         ),
+        *client_auth.routes(),
         *build_admin_routes(services, admin_token),
     ]
     if settings.admin_dist and settings.admin_dist.is_dir():
@@ -130,7 +143,63 @@ def create_app(
 
     app = Starlette(routes=routes, lifespan=lifespan)
     app.state.services = services
-    return app
+    app.state.client_auth = client_auth
+    return ExposureGuard(app, settings.external_base_url)  # type: ignore[return-value]
+
+
+# Paths an app on the internet may reach through the external URL. Everything else (admin page
+# and API, upstream OAuth callbacks, router mode) answers 404 there.
+PUBLIC_PATHS = (
+    "/mcp",
+    "/oauth/authorize",
+    "/oauth/token",
+    "/oauth/register",
+    "/oauth/revoke",
+    "/healthz",
+)
+PUBLIC_PREFIXES = ("/.well-known/oauth-", "/.well-known/openid-configuration")
+FORWARD_HEADERS = (
+    b"x-forwarded-for",
+    b"x-forwarded-host",
+    b"forwarded",
+    b"cf-connecting-ip",
+    b"x-real-ip",
+    b"tailscale-funnel-request",
+)
+
+
+class ExposureGuard:
+    """Keep local-only routes local when the proxy is also reachable through a tunnel.
+
+    A tunnel client (cloudflared, ngrok, Tailscale Funnel) runs on this machine, so to the proxy
+    every tunneled request comes from 127.0.0.1. What gives it away is the Host header (the
+    public name) and the forwarding headers tunnels add. Either one marks the request as
+    external, and external requests only reach PUBLIC_PATHS.
+    """
+
+    def __init__(self, app: Starlette, external_url: str):
+        self.app = app
+        self.state = app.state
+        self.router = app.router
+        ext = urlsplit(external_url) if external_url else None
+        self.external_host = (ext.hostname or "").lower() if ext else ""
+
+    def is_external(self, scope) -> bool:
+        headers = dict(scope.get("headers") or [])
+        if any(h in headers for h in FORWARD_HEADERS):
+            return True
+        host = headers.get(b"host", b"").decode("latin-1").lower()
+        name = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0][1:]
+        return bool(self.external_host) and name == self.external_host
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and self.is_external(scope):
+            path = scope.get("path", "")
+            if path not in PUBLIC_PATHS and not path.startswith(PUBLIC_PREFIXES):
+                response = JSONResponse({"error": "not found"}, 404)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def _page(title: str, text: str, *, ok: bool = True, status: int = 200) -> HTMLResponse:

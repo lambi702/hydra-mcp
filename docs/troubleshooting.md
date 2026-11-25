@@ -74,8 +74,9 @@ expire after 7 days).
 rather than `account2`), and name the account in your request. The tool's `account` argument
 lists each name with its identity.
 
-**Claude Desktop or claude.ai cannot connect.** They connect from Anthropic's servers and cannot
-reach `127.0.0.1`. Not supported yet.
+**Claude Desktop or claude.ai cannot connect.** Claude Desktop: use the local bridge, see
+[Claude Desktop](clients/claude-desktop.md). claude.ai connects from Anthropic's servers and
+needs a tunnel and `HYDRA_MCP_EXTERNAL_URL`, see [claude.ai](clients/claude-ai.md#troubleshooting).
 
 ## Slack
 

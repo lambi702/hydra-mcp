@@ -56,6 +56,7 @@ export interface Status {
   modes: string[];
   public_url: string;
   broker_endpoint: string;
+  external_endpoint?: string | null;
   endpoints: Record<string, string>;
 }
 
@@ -119,6 +120,22 @@ export interface UpstreamOAuth {
 export interface ClientKey {
   key: string;
   endpoint: string;
+  /** absolute path of this installation's `hydra-mcp`, for stdio-only apps (Claude Desktop) */
+  bridge_command?: string;
+  /** set when HYDRA_MCP_EXTERNAL_URL is: the URL apps on the internet use (claude.ai) */
+  external_endpoint?: string | null;
+}
+
+/** An app signed in through hydra-mcp's own OAuth login (claude.ai, Claude Desktop connector). */
+export interface AppLogin {
+  id: string;
+  client_id: string;
+  app_id: string;
+  app_name: string;
+  redirect_uris: string[];
+  created_at: number;
+  last_used_at: number;
+  refresh_expires: number;
 }
 
 export interface ProbeResult {
@@ -255,6 +272,8 @@ export const api = {
   clientsWithKey: () => call<string[]>("GET", "/clients-with-key"),
   createClientKey: (id: string) => call<ClientKey>("POST", `/clients/${id}/key`),
   revokeClientKey: (id: string) => call<void>("DELETE", `/clients/${id}/key`),
+  appLogins: () => call<AppLogin[]>("GET", "/app-logins"),
+  deleteAppLogin: (id: string) => call<void>("DELETE", `/app-logins/${id}`),
   putClient: (c: Client) => call<Client>("PUT", "/clients", c),
   deleteClient: (id: string) => call<void>("DELETE", `/clients/${id}`),
 };

@@ -6,10 +6,14 @@ Only meant to be reachable from your machine (the proxy binds 127.0.0.1 by defau
 from __future__ import annotations
 
 import hmac
+import os
 import re
 import secrets
+import shutil
 import sqlite3
+import sys
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
@@ -76,6 +80,9 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
                 "modes": ["router", "broker"],
                 "public_url": router.base_url,
                 "broker_endpoint": f"{router.base_url}/mcp",
+                "external_endpoint": f"{services.external_url}/mcp"
+                if services.external_url
+                else None,
                 "endpoints": {
                     a.id: account_resource(router.base_url, a.id) for a in accounts if a.enabled
                 },
@@ -407,7 +414,27 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             return Response(status_code=204)
         key = KEY_PREFIX + secrets.token_urlsafe(32)
         await store.set_client_key_hash(client_id, hash_key(key))
-        return JSONResponse({"key": key, "endpoint": f"{router.base_url}/mcp"}, 201)
+        return JSONResponse(
+            {
+                "key": key,
+                "endpoint": f"{router.base_url}/mcp",
+                # For stdio-only apps (Claude Desktop's config file): this very installation's
+                # `hydra-mcp` executable, so the snippet works without anything on the PATH.
+                "bridge_command": _bridge_command(),
+                "external_endpoint": (
+                    f"{services.external_url}/mcp" if services.external_url else None
+                ),
+            },
+            201,
+        )
+
+    async def app_logins(request: Request) -> Response:
+        """Apps signed in through OAuth (claude.ai...), with the client each one acts as."""
+        return JSONResponse(await store.list_oauth_grants())
+
+    async def delete_app_login(request: Request) -> Response:
+        await store.delete_oauth_grant(request.path_params["id"])
+        return Response(status_code=204)
 
     async def clients_with_key(request: Request) -> Response:
         return JSONResponse(sorted(await store.clients_with_key()))
@@ -474,6 +501,8 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
         ),
         Route(f"{p}/clients/{{id}}/key", guarded(client_key), methods=["POST", "DELETE"]),
         Route(f"{p}/clients-with-key", guarded(clients_with_key), methods=["GET"]),
+        Route(f"{p}/app-logins", guarded(app_logins), methods=["GET"]),
+        Route(f"{p}/app-logins/{{id}}", guarded(delete_app_login), methods=["DELETE"]),
         Route(f"{p}/clients", guarded(list_clients), methods=["GET"]),
         Route(f"{p}/clients", guarded(put_client), methods=["POST", "PUT"]),
         Route(f"{p}/clients/{{id}}", guarded(delete_client), methods=["DELETE"]),
@@ -487,6 +516,14 @@ def _free_id(name: str, upstreams: list[Upstream]) -> str:
     while uid in taken:
         uid, i = f"{base}-{i}", i + 1
     return uid
+
+
+def _bridge_command() -> str:
+    found = shutil.which("hydra-mcp")
+    if found:
+        return found
+    exe = Path(sys.executable).parent / ("hydra-mcp.exe" if os.name == "nt" else "hydra-mcp")
+    return str(exe)
 
 
 async def _as_metadata(router: Router, issuer: str) -> dict:

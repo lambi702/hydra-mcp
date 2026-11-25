@@ -27,7 +27,20 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("admin-token", help="print the admin token for the admin page")
 
+    bridge = sub.add_parser(
+        "bridge",
+        help="stdio MCP server relaying to a running hydra-mcp (for Claude Desktop)",
+        description="Reads the client key from HYDRA_MCP_KEY. Logs go to stderr; stdout is "
+        "the MCP channel.",
+    )
+    bridge.add_argument("--url", help="hydra-mcp /mcp URL (default http://127.0.0.1:8765/mcp)")
+
     args = parser.parse_args(argv)
+    if args.cmd == "bridge":
+        # Before Settings(): the bridge must not read the proxy's .env or touch its data dir.
+        from hydra_mcp.bridge import main as bridge_main
+
+        raise SystemExit(bridge_main(args.url, None))
     settings = Settings()
     if settings.admin_dist is None and DEFAULT_ADMIN_DIST.is_dir():
         settings.admin_dist = DEFAULT_ADMIN_DIST
@@ -47,6 +60,8 @@ def main(argv: list[str] | None = None) -> None:
         # The token rides in the fragment: browsers never send it to a server or log it.
         print(f"  admin page http://{host}:{port}/admin/#token={settings.resolved_admin_token}")
         print("             (open this link: it logs you in; keep it private)")
+    if settings.external_base_url:
+        print(f"  external   {settings.external_base_url}/mcp  (apps on the internet: OAuth login)")
     else:
         print(f"  admin token: run `hydra-mcp admin-token` (stored in {settings.data_dir})")
     if args.reload:

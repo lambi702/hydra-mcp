@@ -1,6 +1,8 @@
 # hydra-mcp documentation
 
 - [Getting started](getting-started.md): install, connect accounts, set up your AI apps
+- [Claude Desktop](clients/claude-desktop.md): local bridge, no tunnel
+- [claude.ai and mobile](clients/claude-ai.md): tunnel, OAuth login, managing access
 - [Connector guides](connectors.md): per-service requirements, multi-account notes, pitfalls (generated from the connector library)
 - [Local servers (stdio)](local-servers.md): run `npx`/`uvx` MCP servers once per account
 - [How it works](architecture.md): broker and router modes, OAuth flows, storage, code map

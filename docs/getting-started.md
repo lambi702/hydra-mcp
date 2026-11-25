@@ -117,8 +117,13 @@ Add `--scope user` to have it in every project.
 **Any other app**: Streamable HTTP at `http://127.0.0.1:8765/mcp` with the header
 `Authorization: Bearer hmcp_…`.
 
-> Claude Desktop and claude.ai connect from Anthropic's servers, so they cannot reach
-> `127.0.0.1`. They need a public HTTPS URL, which hydra-mcp does not provide yet.
+**Claude Desktop**: the *Claude Desktop* tab gives a block for `claude_desktop_config.json`
+that starts `hydra-mcp bridge`, a small local relay. No tunnel. See
+[Claude Desktop](clients/claude-desktop.md).
+
+**claude.ai** (and Claude mobile) connects from Anthropic's servers, so it needs hydra-mcp on a
+public HTTPS address (a tunnel), and signs in with OAuth instead of a key. See
+[claude.ai](clients/claude-ai.md).
 
 ## 5. Use it
 
