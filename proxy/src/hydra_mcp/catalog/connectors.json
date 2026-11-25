@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-24",
+  "checked_at": "2026-11-25",
   "connectors": [
     {
       "id": "gmail",
@@ -14,22 +14,24 @@
         "https://www.googleapis.com/auth/gmail.compose",
         "https://www.googleapis.com/auth/gmail.modify"
       ],
-      "notes": "Developer Preview program required. Create your own Google Cloud OAuth client ('Use this client for an AI-powered agent') and enable gmail.googleapis.com + gmailmcp.googleapis.com.",
+      "notes": "Create your own Google Cloud OAuth client (type Web application, with 'Use this client for an AI-powered agent' ticked) and enable gmail.googleapis.com + gmailmcp.googleapis.com. Drafts only: the server cannot send.",
       "docs": "https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server",
       "guide": {
         "summary": "Google's official Gmail MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
-          "About 10 minutes the first time, to create that OAuth client. The next Gmail or Google accounts connect in one click."
+          "About 10 minutes the first time, to create that OAuth client. The next Gmail or Google accounts connect in one click.",
+          "If Google answers that the API is not available for your account, enroll it in the Google Workspace Developer Preview Program (link below): Google has run the Workspace MCP servers as a preview."
         ],
         "accounts": "Add as many Google accounts as you like. In Testing mode, each address must first be added as a test user on the consent screen.",
         "gotchas": [
-          "Google rejects calls from an OAuth client unless 'Use this client for an AI-powered agent' is ticked when the client is created.",
+          "Client type: Web application. Google rejects calls from an OAuth client unless 'Use this client for an AI-powered agent' is ticked on it (Google Auth Platform, Clients). The default Apps Script client cannot have this setting.",
           "APIs to enable: gmail.googleapis.com and gmailmcp.googleapis.com.",
-          "Scopes: gmail.readonly, gmail.compose, gmail.modify. Tools: search and read threads, drafts, labels. The Gmail MCP server cannot send mail; it creates drafts.",
+          "Scopes asked: gmail.readonly, gmail.compose, gmail.modify (the server advertises about 20, including full mailbox access; hydra-mcp asks only for these three).",
+          "Tools: search and read threads and messages, drafts, labels, trash, spam. No send tool: the AI writes a draft, you send it from Gmail.",
           "hydra-mcp asks Google for offline access, so it gets a refresh token and you do not log in again every hour.",
-          "Testing-mode apps: Google may expire refresh tokens after 7 days. If an account turns 'not connected', click Reconnect, or publish the consent screen to 'In production' (no review needed for personal use under 100 users, but Google shows an 'unverified app' warning)."
+          "Testing-mode apps: Google may expire refresh tokens after 7 days. If an account turns 'not connected', click Reconnect, or publish the consent screen to 'In production' (no review needed for personal use under 100 users, but Google shows an 'unverified app' warning).",
+          "Google recommends screening tool results for prompt injection (Model Armor or similar): mail content is untrusted input for the AI."
         ],
         "token": null,
         "links": [
@@ -463,7 +465,8 @@
         "accounts": "One hydra-mcp account per Linear workspace. To add another workspace, click '+ Add another account' and pick the other workspace on Linear's consent page.",
         "gotchas": [
           "Linear's OAuth sessions start with a 25-day refresh window. If an account turns 'not connected', click Reconnect.",
-          "Read-only alternative: a Linear API key with only the Read permission (use 'Use a token instead')."
+          "Read-only: add https://mcp.linear.app/mcp/readonly by URL (it only ever exposes read tools), or use a Linear API key with only the Read permission ('Use a token instead'). A read-only grant in hydra-mcp also hides write tools.",
+          "Linear's own docs mention mcp-remote config folders for several workspaces: not needed here, each hydra-mcp account keeps its own token."
         ],
         "token": {
           "name": "Linear API key",
@@ -491,7 +494,7 @@
       "auth": "oauth_dcr",
       "status": "ga",
       "scopes": [],
-      "notes": "Supports DCR and Client ID Metadata Documents.",
+      "notes": "Supports DCR and Client ID Metadata Documents. The legacy SSE endpoint (/sse) retires on 23 February 2027; hydra-mcp uses /mcp.",
       "docs": "https://developers.notion.com/guides/mcp/get-started-with-mcp",
       "guide": {
         "summary": "Notion's official hosted MCP server: search, read and edit pages and databases. One click: hydra-mcp registers itself, you log in at Notion.",
@@ -503,7 +506,9 @@
         "gotchas": [
           "Search across connected sources (Slack, Google Drive...) and some search filters need a Business or Enterprise plan with Notion AI.",
           "Business and Enterprise plans get higher rate limits.",
+          "File uploads through the tools are limited to 20 MiB.",
           "MCP tokens (no browser login) exist on Business and Enterprise only, and only workspace owners can create them.",
+          "An Enterprise workspace policy can block MCP connections: ask your workspace owner if the consent page refuses.",
           "The older open-source notion-mcp-server (integration token) is no longer maintained: use this hosted one."
         ],
         "token": {
@@ -545,8 +550,8 @@
         "gotchas": [
           "The OAuth consent screen lists broad classic scopes (repo, read:org, gist, notifications...). For narrow access, use a fine-grained token restricted to some repositories.",
           "Fine-grained tokens expire (you choose the date, up to a year). When one expires, the account shows 'not connected': create a new token and click 'New token' on that account.",
-          "GitHub Enterprise Server is not supported by the remote server. GitHub Enterprise Cloud with data residency uses another host (copilot-api.<your-subdomain>.ghe.com/mcp): add it by URL.",
-          "Read-only variant: add https://api.githubcopilot.com/mcp/readonly by URL."
+          "Fewer tools: GitHub serves one URL per toolset, for example https://api.githubcopilot.com/mcp/x/issues or /mcp/x/pull_requests, and /readonly after any of them (/mcp/readonly, /mcp/x/issues/readonly). Add such a URL as 'Another MCP server (by URL)'. Your AI then gets fewer, more relevant tools.",
+          "GitHub Enterprise Server is not supported by the remote server. GitHub Enterprise Cloud with data residency uses another host (copilot-api.<your-subdomain>.ghe.com/mcp): add it by URL, with a token."
         ],
         "token": {
           "name": "GitHub personal access token",
@@ -610,6 +615,120 @@
           {
             "label": "Policies and governance",
             "url": "https://github.com/github/github-mcp-server/blob/main/docs/policies-and-governance.md"
+          }
+        ]
+      }
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "vendor": "Salesforce",
+      "category": "chat",
+      "url": "https://mcp.slack.com/mcp",
+      "auth": "oauth_preregistered",
+      "status": "ga",
+      "scopes": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.mpim",
+        "search:read.im",
+        "search:read.files",
+        "search:read.users",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "im:history",
+        "channels:read",
+        "groups:read",
+        "mpim:read",
+        "im:read",
+        "users:read",
+        "users:read.email",
+        "files:read",
+        "canvases:read",
+        "lists:read",
+        "emoji:read",
+        "reactions:read",
+        "chat:write",
+        "reactions:write",
+        "canvases:write",
+        "files:write",
+        "lists:write",
+        "channels:write",
+        "groups:write",
+        "im:write",
+        "mpim:write"
+      ],
+      "notes": "No dynamic registration. You create a Slack app in your workspace (internal apps are allowed for MCP, unlisted distributed apps are not), turn on its MCP feature, and a workspace admin approves it. One app per workspace.",
+      "docs": "https://docs.slack.dev/ai/slack-mcp-server/",
+      "one_client_per_workspace": true,
+      "redirect_host": "localhost",
+      "scope_separator": ",",
+      "guide": {
+        "summary": "Slack's official MCP server: search messages and files, read channels and threads, send and schedule messages, canvases, lists, reactions. It acts as you (user token): the AI sees what you see.",
+        "before": [
+          "A workspace admin must allow MCP integrations, and approve your app if your workspace requires app approval. On a workspace you own, you approve it yourself.",
+          "About 5 minutes per workspace, to create a small Slack app. Slack does not let apps register themselves, and only lets an app you created be used in its own workspace.",
+          "IP allowlists of your workspace apply to MCP calls too: the machine running hydra-mcp must be allowed."
+        ],
+        "accounts": "One Slack app per workspace. For a second workspace, click '+ Another workspace' on the Slack card: hydra-mcp adds a second Slack server with its own app, and its tools appear as slack-2__… . A second person in the same workspace is '+ Add another account' (same app).",
+        "gotchas": [
+          "Turn on PKCE in the app (OAuth & Permissions): Slack only accepts a plain-http callback on localhost from apps with PKCE, which is why the callback below says localhost and not 127.0.0.1. PKCE makes the app a public client, cannot be undone, and its refresh tokens last 30 days. Leave the client secret empty in hydra-mcp then.",
+          "Behind an HTTPS public URL (a tunnel, see the Claude guides) you can skip PKCE: register that https callback and paste the client secret instead.",
+          "Scopes: hydra-mcp asks for every user scope the Slack tools document (search, history, write...). Remove the ones you do not want from the app's User Token Scopes before installing; tools that need them will then fail. Read-only use: also give your AI app a 'read only' grant in hydra-mcp.",
+          "The consent page shows the workspace in its top right corner: check it before you click Allow. hydra-mcp labels the account with the workspace name.",
+          "Slack rejects apps that are distributed but not published in the Slack Marketplace: keep 'Manage Distribution' off."
+        ],
+        "token": null,
+        "client": {
+          "provider": "Slack",
+          "client_type": "Slack app (internal)",
+          "steps": [
+            {
+              "title": "Create the Slack app from a manifest",
+              "text": "Click 'Create New App', choose 'From a manifest', pick the workspace this account is in, select the JSON tab and replace its content with the manifest below. It sets the name, the callback and the user scopes. Review, then Create.",
+              "link": "https://api.slack.com/apps",
+              "fields": [
+                {
+                  "label": "App manifest (JSON)",
+                  "value": "{\n  \"display_information\": {\n    \"name\": \"hydra-mcp\"\n  },\n  \"oauth_config\": {\n    \"redirect_urls\": [\n      \"{redirect_uri}\"\n    ],\n    \"scopes\": {\n      \"user\": [\n        \"search:read.public\",\n        \"search:read.private\",\n        \"search:read.mpim\",\n        \"search:read.im\",\n        \"search:read.files\",\n        \"search:read.users\",\n        \"channels:history\",\n        \"groups:history\",\n        \"mpim:history\",\n        \"im:history\",\n        \"channels:read\",\n        \"groups:read\",\n        \"mpim:read\",\n        \"im:read\",\n        \"users:read\",\n        \"users:read.email\",\n        \"files:read\",\n        \"canvases:read\",\n        \"lists:read\",\n        \"emoji:read\",\n        \"reactions:read\",\n        \"chat:write\",\n        \"reactions:write\",\n        \"canvases:write\",\n        \"files:write\",\n        \"lists:write\",\n        \"channels:write\",\n        \"groups:write\",\n        \"im:write\",\n        \"mpim:write\"\n      ]\n    }\n  },\n  \"settings\": {\n    \"org_deploy_enabled\": false,\n    \"socket_mode_enabled\": false,\n    \"token_rotation_enabled\": false\n  }\n}"
+                }
+              ]
+            },
+            {
+              "title": "Turn on MCP for the app",
+              "text": "In the app's sidebar, open 'Agents' and switch on 'Slack Model Context Protocol (MCP) Server'."
+            },
+            {
+              "title": "Opt in to PKCE",
+              "text": "OAuth & Permissions: opt in to PKCE. Slack accepts the plain-http localhost callback only from PKCE apps. This makes the app a public client and cannot be undone, which is fine for an app used only by hydra-mcp. Skip this step if hydra-mcp runs behind an https public URL."
+            },
+            {
+              "title": "Copy the Client ID",
+              "text": "Basic Information, App Credentials: copy the Client ID. With PKCE on, leave the secret empty below. Without PKCE, also copy the Client Secret."
+            },
+            {
+              "title": "Paste it below, then allow access",
+              "text": "Slack shows its consent page for your workspace. If it says the app needs approval, your admin approves it in the workspace's app management; then click Reconnect."
+            }
+          ]
+        },
+        "links": [
+          {
+            "label": "Slack MCP server overview",
+            "url": "https://docs.slack.dev/ai/slack-mcp-server/"
+          },
+          {
+            "label": "Developing with the Slack MCP server",
+            "url": "https://docs.slack.dev/ai/slack-mcp-server/developing"
+          },
+          {
+            "label": "PKCE and desktop redirects",
+            "url": "https://docs.slack.dev/authentication/using-pkce"
+          },
+          {
+            "label": "Guide to MCP in Slack (Help Center)",
+            "url": "https://slack.com/help/articles/48855576908307-Guide-to-MCP-in-Slack"
           }
         ]
       }

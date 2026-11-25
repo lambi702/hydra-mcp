@@ -2,7 +2,7 @@
 
 This walks through a first setup: install, connect two accounts of the same service, give an AI
 app access, and use it. Count about ten minutes, more if a service needs a one-time OAuth app
-(Google, GitHub, Asana).
+(Google, GitHub, Slack, Asana).
 
 ## 1. Install and start
 
@@ -40,10 +40,11 @@ Then click **Sign in**. Depending on the service:
 
 - **One click** (Atlassian, Linear, Notion, Sentry, Stripe, Cloudflare, Supabase): hydra-mcp
   registers itself at the service and sends you to its login page.
-- **One-time OAuth app** (Google, GitHub, Asana): these services do not let apps register
+- **One-time OAuth app** (Google, GitHub, Slack, Asana): these services do not let apps register
   themselves. A wizard lists the steps with direct links and the exact values to paste,
   including the callback URL `http://127.0.0.1:8765/oauth/callback`. You do this once per
-  service; every later account is one click.
+  service; every later account is one click. Slack is the exception: one small Slack app per
+  workspace (**+ Another workspace** on its card), and its callback uses `localhost`.
 - **Token** (GitHub, Linear, Stripe, Cloudflare, Supabase, Notion Business): click *Use a token
   instead*, create a personal token with the link given, paste it. hydra-mcp tries it against
   the service before saving it.

@@ -4,6 +4,7 @@ import { Avatar } from "../components/Avatar";
 import { ConnectorGuide, TokenForm } from "../components/ConnectorGuide";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { SetupWizard } from "../components/SetupWizard";
+import { StdioForm } from "../components/StdioForm";
 import { useLoad } from "../useLoad";
 
 type ConnectBody = Parameters<typeof api.connect>[0];
@@ -27,6 +28,14 @@ export function Connections() {
   // The guide of one connector: before a first connection ("new"), or later from its card.
   const [guide, setGuide] = useState<{ connector: Connector; token?: boolean } | null>(null);
   const [tokenFor, setTokenFor] = useState<Account | null>(null);
+  // Local (stdio) servers: a new server, another account of one, or new secrets for an account.
+  const [local, setLocal] = useState<{ upstream?: Upstream; account?: Account } | null>(null);
+
+  async function localDone(accountId: string, created: boolean) {
+    setLocal(null);
+    await Promise.all([upstreams.reload(), accounts.reload(), tokens.reload()]);
+    if (created) setNaming({ id: accountId, isNew: true });
+  }
 
   const clients = useLoad(api.clients);
   const usedBy = (accountId: string) =>
@@ -34,8 +43,12 @@ export function Connections() {
       c.grants.filter((g) => g.account_id === accountId).map((g) => ({ name: c.name, mode: g.mode })),
     );
 
-  const connectorFor = (upstreamId: string) =>
-    catalog.data?.connectors.find((c) => c.installed_as === upstreamId);
+  // By URL, not by installed_as: a second Slack workspace is another server row, same URL.
+  const trim = (u?: string | null) => (u ?? "").replace(/\/+$/, "");
+  const connectorFor = (upstreamId: string) => {
+    const url = trim(upstreams.data?.find((u) => u.id === upstreamId)?.url);
+    return catalog.data?.connectors.find((c) => c.installed_as === upstreamId || (url && trim(c.url) === url));
+  };
 
   async function connectWithToken(body: { connector_id?: string; upstream_id?: string; account_id?: string }, token: string) {
     const r = await api.connectToken({ ...body, token });
@@ -194,19 +207,33 @@ export function Connections() {
             setGuide({ connector: c });
           }}
           onCustom={(name, url) => void startConnect({ name, url }, url)}
+          onLocal={() => {
+            setPicking(false);
+            setLocal({});
+          }}
           onClose={() => setPicking(false)}
+        />
+      )}
+
+      {local && (
+        <StdioForm
+          upstream={local.upstream}
+          account={local.account}
+          onDone={(id, created) => void localDone(id, created)}
+          onCancel={() => setLocal(null)}
         />
       )}
 
       {(accounts.loading || upstreams.loading) && <p className="muted">Loading…</p>}
 
-      {groups.length === 0 && !picking && !guide && !wizard && accounts.data && (
+      {groups.length === 0 && !picking && !guide && !wizard && !local && accounts.data && (
         // First visit: the library itself is the empty state, one click from a first login.
         <Picker
           title="Connect your first account"
           connectors={catalog.data?.connectors ?? []}
           onPick={(c) => setGuide({ connector: c })}
           onCustom={(name, url) => void startConnect({ name, url }, url)}
+          onLocal={() => setLocal({})}
         />
       )}
 
@@ -219,6 +246,7 @@ export function Connections() {
                 <h3>{upstream.name}</h3>
                 <span className="muted small">
                   {list.length} account{list.length > 1 ? "s" : ""}
+                  {upstream.transport === "stdio" && " · local server"}
                 </span>
               </div>
             </div>
@@ -226,9 +254,24 @@ export function Connections() {
               {connectorFor(upstream.id) && (
                 <button onClick={() => setGuide({ connector: connectorFor(upstream.id)! })}>Guide</button>
               )}
-              <button onClick={() => void startConnect({ upstream_id: upstream.id }, upstream.id)}>
+              <button
+                onClick={() =>
+                  upstream.transport === "stdio"
+                    ? setLocal({ upstream })
+                    : void startConnect({ upstream_id: upstream.id }, upstream.id)
+                }
+              >
                 + Add another account
               </button>
+              {connectorFor(upstream.id)?.one_client_per_workspace && (
+                <button
+                  onClick={() =>
+                    void startConnect({ connector_id: connectorFor(upstream.id)!.id, new_upstream: true }, `${upstream.id}-ws`)
+                  }
+                >
+                  + Another workspace
+                </button>
+              )}
             </div>
           </div>
           <ul className="account-list">
@@ -243,7 +286,7 @@ export function Connections() {
                       <strong>{a.alias}</strong>
                       <Status status={status} />
                     </div>
-                    {a.identity !== a.alias && (
+                    {a.identity !== a.alias && (a.identity || upstream.transport !== "stdio") && (
                       <div className="muted small">{a.identity || "identity unknown"}</div>
                     )}
                     <div className="small usage">
@@ -261,15 +304,21 @@ export function Connections() {
                     </div>
                   </div>
                   <div className="account-actions">
-                    {!status && (
+                    {upstream.transport === "stdio" ? (
+                      <button className={status ? "ghost" : "primary"} onClick={() => setLocal({ account: a })}>
+                        New secrets
+                      </button>
+                    ) : (
+                      !status && (
                       <button className="primary" onClick={() => void reconnect(a)}>
                         Reconnect
                       </button>
+                      )
                     )}
                     <button className="ghost" onClick={() => setNaming({ id: a.id, isNew: false })}>
                       Rename
                     </button>
-                    {status && (
+                    {status && upstream.transport !== "stdio" && (
                       <button className="ghost" onClick={() => void reconnect(a)}>
                         Reconnect
                       </button>
@@ -378,6 +427,7 @@ function Picker({
   connectors,
   onPick,
   onCustom,
+  onLocal,
   onClose,
   title = "Add a connector",
 }: {
@@ -385,6 +435,7 @@ function Picker({
   connectors: Connector[];
   onPick: (c: Connector) => void;
   onCustom: (name: string, url: string) => void;
+  onLocal: () => void;
   onClose?: () => void;
 }) {
   const [filter, setFilter] = useState("");
@@ -438,6 +489,14 @@ function Picker({
           <input required type="url" placeholder="https://…/mcp" value={custom.url} onChange={(e) => setCustom({ ...custom, url: e.target.value })} />
           <button type="submit">Connect</button>
         </form>
+      </details>
+      <details>
+        <summary>A local server you run with a command (stdio)</summary>
+        <p className="muted small">
+          For MCP servers installed on this machine (<code>npx …</code>, <code>uvx …</code>, a
+          binary). hydra-mcp starts one copy per account, each with its own secrets.
+        </p>
+        <button onClick={onLocal}>Add a local server</button>
       </details>
     </div>
   );

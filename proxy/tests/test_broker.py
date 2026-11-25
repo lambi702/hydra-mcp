@@ -49,6 +49,7 @@ class FakeProvider:
         self.refresh: dict[str, str] = {}  # refresh token -> user
         self.sessions: dict[str, str] = {}  # Mcp-Session-Id -> user
         self.refresh_count = 0
+        self.slack_shape = False  # answer like Slack: ok flag, user token under authed_user
 
     # -- the "browser": what the user does at the AS login page ------------------------------
     def approve(self, authorize_url: str, user: str) -> dict[str, str]:
@@ -76,6 +77,8 @@ class FakeProvider:
         }
         if self.id_tokens:
             tokens["id_token"] = f"{_b64({'alg': 'none'})}.{_b64({'email': user})}."
+        if self.slack_shape:
+            return {"ok": True, "authed_user": tokens, "team": {"id": "T1", "name": user}}
         return tokens
 
     # -- endpoints ---------------------------------------------------------------------------
@@ -258,7 +261,7 @@ async def test_connect_stores_identity_and_state_is_single_use(env):
     proxy, provider = env
     r = await connect(proxy, provider, "mail-work", "alice@work.test")
     assert r.status_code == 303
-    assert r.headers["location"] == "/admin/?connected=mail-work&new=0"
+    assert r.headers["location"] == "http://proxy.test/admin/?connected=mail-work&new=0"
     status = (await proxy.get("/admin/api/accounts-status", headers=H)).json()
     assert status["mail-work"]["identity"] == "alice@work.test"
     assert "mail-perso" not in status
@@ -453,7 +456,7 @@ async def test_connect_creates_the_account_only_after_login(env):
     # A login at a company domain: named after the domain, and the admin page asks to rename.
     r = await connect_new(proxy, provider, "carol@acme.test", upstream_id="mail")
     assert r.status_code == 303
-    assert r.headers["location"] == "/admin/?connected=mail-acme&new=1"
+    assert r.headers["location"] == "http://proxy.test/admin/?connected=mail-acme&new=1"
     new = {a["id"]: a for a in (await accounts()).json()}["mail-acme"]
     assert new["alias"] == "acme" and new["identity"] == "carol@acme.test"
     status = (await proxy.get("/admin/api/accounts-status", headers=H)).json()
@@ -461,7 +464,7 @@ async def test_connect_creates_the_account_only_after_login(env):
 
     # The same person again: a reconnect of that account, not a duplicate.
     r = await connect_new(proxy, provider, "carol@acme.test", upstream_id="mail")
-    assert r.headers["location"] == "/admin/?connected=mail-acme&new=0"
+    assert r.headers["location"] == "http://proxy.test/admin/?connected=mail-acme&new=0"
     assert len((await accounts()).json()) == len(before) + 1
 
 
@@ -502,10 +505,10 @@ async def test_identity_probe_names_accounts_without_id_token(env, monkeypatch):
         ("whoami", lambda r: r["content"][0]["text"].split(" as ")[1].split("@")[1].split()[0]),
     )
     r = await connect_new(proxy, provider, "erin@site-one.test", upstream_id="mail")
-    assert r.headers["location"] == "/admin/?connected=mail-site-one&new=1"
+    assert r.headers["location"] == "http://proxy.test/admin/?connected=mail-site-one&new=1"
     # Same site again: a reconnect, not a duplicate.
     r = await connect_new(proxy, provider, "frank@site-one.test", upstream_id="mail")
-    assert r.headers["location"] == "/admin/?connected=mail-site-one&new=0"
+    assert r.headers["location"] == "http://proxy.test/admin/?connected=mail-site-one&new=0"
     # Backfill for an account connected before probes existed.
     acc = {a["id"]: a for a in (await proxy.get("/admin/api/accounts", headers=H)).json()}
     await proxy.put("/admin/api/accounts", headers=H, json={**acc["mail-site-one"], "identity": ""})
@@ -632,3 +635,87 @@ def test_connector_docs_are_up_to_date():
     assert doc.read_text(encoding="utf-8") == render(), (
         "run: python -m hydra_mcp.catalog.docs ../docs/connectors.md"
     )
+
+
+SLACK_URL = "https://mcp.slack.com/mcp"
+
+
+async def test_slack_flow_localhost_callback_commas_and_workspace_identity(env):
+    proxy, provider = env
+    provider.dcr = False
+    provider.id_tokens = False
+    provider.slack_shape = True
+    r = await proxy.post("/admin/api/connect", headers=H, json={"connector_id": "slack"})
+    assert r.status_code == 409 and r.json()["needs_manual_client"]
+    guide = r.json()["guide"]
+    # Not a loopback public URL here, so the callback is unchanged (see callback_for tests).
+    assert guide["redirect_uri"] == "http://proxy.test/oauth/callback"
+    assert "http://proxy.test/oauth/callback" in json.dumps(guide["steps"])  # in the manifest
+    upstream_id = r.json()["upstream_id"]
+    provider.clients["slack-app"] = {}
+    r = await proxy.put(
+        f"/admin/api/upstreams/{upstream_id}/oauth", headers=H, json={"client_id": "slack-app"}
+    )
+    assert r.status_code == 200, r.text
+    r = await proxy.post("/admin/api/connect", headers=H, json={"connector_id": "slack"})
+    url = r.json()["authorize_url"]
+    q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
+    assert "," in q["scope"] and " " not in q["scope"]
+    callback = provider.approve(url, "Acme Corp")
+    r = await proxy.get("/oauth/callback", params=callback)
+    assert r.status_code == 303, r.text
+    accounts = (await proxy.get("/admin/api/accounts", headers=H)).json()
+    slack = [a for a in accounts if a["upstream_id"] == upstream_id]
+    assert slack and slack[0]["identity"] == "Acme Corp" and slack[0]["alias"] == "acme-corp"
+
+
+async def test_another_workspace_gets_its_own_server_row(env):
+    proxy, provider = env
+    provider.dcr = False
+    body = {"connector_id": "slack", "new_upstream": True}
+    first = (await proxy.post("/admin/api/connect", headers=H, json=body)).json()["upstream_id"]
+    # a cancelled attempt (no account yet) is reused rather than piling up rows
+    again = (await proxy.post("/admin/api/connect", headers=H, json=body)).json()["upstream_id"]
+    assert first == again == "slack"
+    r = await proxy.put(
+        "/admin/api/accounts",
+        headers=H,
+        json={"id": "slack-acme", "upstream_id": "slack", "alias": "acme"},
+    )
+    assert r.status_code == 200
+    second = (await proxy.post("/admin/api/connect", headers=H, json=body)).json()["upstream_id"]
+    assert second == "slack-2"
+    plain = {"connector_id": "slack"}
+    assert (await proxy.post("/admin/api/connect", headers=H, json=plain)).json()[
+        "upstream_id"
+    ] == "slack"
+
+
+def test_callback_for_slack_uses_localhost_only_for_loopback_http():
+    from hydra_mcp.broker.setup import callback_for
+
+    slack = Upstream(id="slack", name="Slack", url=SLACK_URL)
+    other = Upstream(id="lin", name="Linear", url="https://mcp.linear.app/mcp")
+    assert (
+        callback_for(slack, "http://127.0.0.1:8765/oauth/callback")
+        == "http://localhost:8765/oauth/callback"
+    )
+    assert (
+        callback_for(other, "http://127.0.0.1:8765/oauth/callback")
+        == "http://127.0.0.1:8765/oauth/callback"
+    )
+    https = "https://hydra.example.com/oauth/callback"
+    assert callback_for(slack, https) == https
+
+
+def test_token_response_normalization():
+    from hydra_mcp.broker.oauth import OAuthError, normalize_token_response
+
+    with pytest.raises(OAuthError, match="invalid_code"):
+        normalize_token_response({"ok": False, "error": "invalid_code"})
+    out = normalize_token_response(
+        {"ok": True, "authed_user": {"access_token": "xoxp-1", "scope": "a"}, "team": {}}
+    )
+    assert out["access_token"] == "xoxp-1"
+    flat = {"access_token": "x", "token_type": "Bearer"}
+    assert normalize_token_response(flat) == flat

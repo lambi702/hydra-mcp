@@ -124,7 +124,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="copy-row">
       {label && <span className="muted small">{label}</span>}
-      <code>{value}</code>
+      {value.includes("\n") ? <pre className="copy-block">{value}</pre> : <code>{value}</code>}
       <button
         type="button"
         onClick={() => {

@@ -23,6 +23,7 @@ Everything lives in the data directory (`~/.hydra-mcp`, created with mode `0700`
 | Upstream access and refresh tokens | `hydra-mcp.sqlite3`, table `account_tokens` | AES-256-GCM, key in `vault.key` |
 | OAuth client secrets you pasted, or DCR secrets | `hydra-mcp.sqlite3`, table `upstream_oauth` | AES-256-GCM, key in `vault.key` |
 | Pasted personal tokens (PAT, API keys) | same as upstream tokens | AES-256-GCM |
+| Secret settings of local (stdio) accounts | same as upstream tokens | AES-256-GCM |
 | Client keys (`hmcp_…`) | `hydra-mcp.sqlite3`, table `clients` | SHA-256 hash only; the key is shown once |
 | App access and refresh tokens (`hmcp_at_…`, `hmcp_rt_…`) | table `oauth_grants` | SHA-256 hash only |
 | Vault key | `vault.key` | 32 random bytes, file mode `0600` |
@@ -114,6 +115,9 @@ your machine). Prefer a tunnel you trust with that content.
 - *A replayed or forged OAuth callback*: `state` is single-use and tied to a PKCE verifier only
   hydra-mcp knows.
 - *A tampered token row copied between accounts*: AEAD associated data makes it fail.
+- *A local (stdio) server reading secrets it was not given*: started programs get a short list
+  of variables (`PATH`, `HOME`, locale…), the server's shared settings and their own account's
+  secrets, never the rest of the proxy's environment.
 
 **Out of scope (not defended against):**
 
@@ -125,6 +129,9 @@ your machine). Prefer a tunnel you trust with that content.
   accounts and tools are reachable; it does not inspect content.
 - The upstream servers themselves and their tool annotations: a server that marks a write tool
   `readOnlyHint: true` defeats the *read only* mode for that tool.
+- The admin token can start programs. Local (stdio) servers are commands you type in the admin
+  page, run as your user, like the `command` entries of any app's MCP config. Whoever has the
+  admin token can run any program. Set `HYDRA_MCP_STDIO_ENABLED=false` where that is not wanted.
 - Exposing the proxy to a network by binding it elsewhere than `127.0.0.1`. Use a tunnel and
   `HYDRA_MCP_EXTERNAL_URL` instead, which keeps the admin surface local. If you bind it
   elsewhere anyway, put it behind TLS and a firewall, and know that anyone who reaches

@@ -22,6 +22,7 @@ from hydra_mcp.broker.aggregator import Aggregator
 from hydra_mcp.broker.endpoint import BrokerEndpoint
 from hydra_mcp.broker.identity import IdentityProbe
 from hydra_mcp.broker.oauth import OAuthBroker, OAuthError
+from hydra_mcp.broker.stdio import StdioPool
 from hydra_mcp.broker.upstream import UpstreamClient
 from hydra_mcp.clientauth import ClientAuth, Origins
 from hydra_mcp.router import Router
@@ -38,6 +39,7 @@ class Services:
     router: Router
     oauth: OAuthBroker
     aggregator: Aggregator
+    stdio: StdioPool | None = None
     external_url: str = ""
 
 
@@ -61,7 +63,14 @@ def create_app(
     oauth = OAuthBroker(
         store, vault, http, router.prm, settings.base_url, IdentityProbe(upstream_client)
     )
-    aggregator = Aggregator(store, oauth, upstream_client)
+    stdio = (
+        StdioPool(
+            settings.data_dir, timeout_s=settings.upstream_timeout_s, idle_s=settings.stdio_idle_s
+        )
+        if settings.stdio_enabled
+        else None
+    )
+    aggregator = Aggregator(store, oauth, upstream_client, stdio)
     admin_token = settings.resolved_admin_token
     client_auth = ClientAuth(
         store, Origins(settings.base_url, settings.external_base_url), admin_token
@@ -72,6 +81,7 @@ def create_app(
         oauth=oauth,
         aggregator=aggregator,
         external_url=settings.external_base_url,
+        stdio=stdio,
     )
     broker = BrokerEndpoint(store, aggregator, client_auth)
 
@@ -82,6 +92,8 @@ def create_app(
         try:
             yield
         finally:
+            if stdio is not None:
+                await stdio.close()
             await http.aclose()
             await store.close()
 
@@ -103,10 +115,12 @@ def create_app(
             result = await oauth.finish_link(q["state"], q["code"])
         except (OAuthError, LookupError) as exc:
             return _page("Connection failed", str(exc), ok=False, status=400)
-        aggregator.invalidate(result.account.id)
+        await aggregator.invalidate(result.account.id)
         # Back to the admin page, which asks for a friendly name when the account is new.
         query = urlencode({"connected": result.account.id, "new": int(result.created)})
-        return RedirectResponse(f"/admin/?{query}", status_code=303)
+        # Absolute: the callback may have arrived on another host name (localhost for Slack)
+        # than the one the admin page is logged in on.
+        return RedirectResponse(f"{settings.base_url}/admin/?{query}", status_code=303)
 
     routes: list[Route | Mount] = [
         Route("/healthz", health, methods=["GET"]),

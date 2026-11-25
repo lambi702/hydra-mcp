@@ -59,7 +59,8 @@ class Router:
             account, upstream = await self.store.get_account(account_id)
         except NotFound:
             return None, None
-        if not account.enabled:
+        if not account.enabled or upstream.is_stdio:
+            # Router mode forwards HTTP as is; a local process has no URL to forward to.
             return None, None
         return account, upstream
 
@@ -67,7 +68,9 @@ class Router:
         account_id = request.path_params["account_id"]
         account, upstream = await self._resolve(account_id)
         if account is None:
-            return JSONResponse({"error": f"unknown or disabled account '{account_id}'"}, 404)
+            return JSONResponse(
+                {"error": f"unknown, disabled or local (stdio) account '{account_id}'"}, 404
+            )
 
         upstream_url = str(upstream.url)
         headers = [(k, v) for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP]

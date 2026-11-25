@@ -103,7 +103,36 @@ CREATE TABLE IF NOT EXISTS link_flows (
 MIGRATIONS = [
     # (table, column, DDL) -- additive only, applied when the column is missing
     ("clients", "key_hash", "ALTER TABLE clients ADD COLUMN key_hash TEXT"),
+    # stdio upstreams: url is '' for them; command/args/env describe the local program.
+    (
+        "upstreams",
+        "transport",
+        "ALTER TABLE upstreams ADD COLUMN transport TEXT NOT NULL DEFAULT 'http'",
+    ),
+    ("upstreams", "command", "ALTER TABLE upstreams ADD COLUMN command TEXT NOT NULL DEFAULT ''"),
+    ("upstreams", "args", "ALTER TABLE upstreams ADD COLUMN args TEXT NOT NULL DEFAULT '[]'"),
+    ("upstreams", "env", "ALTER TABLE upstreams ADD COLUMN env TEXT NOT NULL DEFAULT '{}'"),
+    (
+        "upstreams",
+        "isolate_home",
+        "ALTER TABLE upstreams ADD COLUMN isolate_home INTEGER NOT NULL DEFAULT 0",
+    ),
 ]
+
+UPSTREAM_COLS = "id, name, url, transport, command, args, env, isolate_home"
+
+
+def _upstream(row: dict) -> Upstream:
+    return Upstream(
+        id=row["id"],
+        name=row["name"],
+        url=row["url"] or None,
+        transport=row["transport"],
+        command=row["command"],
+        args=json.loads(row["args"]),
+        env=json.loads(row["env"]),
+        isolate_home=bool(row["isolate_home"]),
+    )
 
 
 class NotFound(LookupError):
@@ -140,14 +169,27 @@ class Store:
 
     # -- upstreams -------------------------------------------------------------------------
     async def list_upstreams(self) -> list[Upstream]:
-        rows = await self.db.execute_fetchall("SELECT id, name, url FROM upstreams ORDER BY id")
-        return [Upstream(**dict(r)) for r in rows]
+        rows = await self.db.execute_fetchall(
+            f"SELECT {UPSTREAM_COLS} FROM upstreams ORDER BY id"  # noqa: S608
+        )
+        return [_upstream(dict(r)) for r in rows]
 
     async def put_upstream(self, u: Upstream) -> Upstream:
         await self.db.execute(
-            "INSERT INTO upstreams (id, name, url) VALUES (?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, url = excluded.url",
-            (u.id, u.name, str(u.url)),
+            f"INSERT INTO upstreams ({UPSTREAM_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "  # noqa: S608
+            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, url = excluded.url, "
+            "transport = excluded.transport, command = excluded.command, args = excluded.args, "
+            "env = excluded.env, isolate_home = excluded.isolate_home",
+            (
+                u.id,
+                u.name,
+                str(u.url) if u.url else "",
+                u.transport.value,
+                u.command,
+                json.dumps(u.args),
+                json.dumps(u.env),
+                int(u.isolate_home),
+            ),
         )
         await self.db.commit()
         return u
@@ -164,15 +206,13 @@ class Store:
 
     async def get_account(self, account_id: str) -> tuple[Account, Upstream]:
         rows = await self.db.execute_fetchall(
-            "SELECT a.id, a.upstream_id, a.alias, a.identity, a.enabled, "
-            "u.name AS u_name, u.url AS u_url "
-            "FROM accounts a JOIN upstreams u ON u.id = a.upstream_id WHERE a.id = ?",
+            "SELECT id, upstream_id, alias, identity, enabled FROM accounts WHERE id = ?",
             (account_id,),
         )
         if not rows:
             raise NotFound(account_id)
         r = dict(rows[0])
-        upstream = Upstream(id=r["upstream_id"], name=r.pop("u_name"), url=r.pop("u_url"))
+        upstream = await self.get_upstream(r["upstream_id"])
         return Account(**{**r, "enabled": bool(r["enabled"])}), upstream
 
     async def put_account(self, a: Account) -> Account:
@@ -324,11 +364,12 @@ class Store:
 
     async def get_upstream(self, upstream_id: str) -> Upstream:
         rows = await self.db.execute_fetchall(
-            "SELECT id, name, url FROM upstreams WHERE id = ?", (upstream_id,)
+            f"SELECT {UPSTREAM_COLS} FROM upstreams WHERE id = ?",  # noqa: S608
+            (upstream_id,),
         )
         if not rows:
             raise NotFound(upstream_id)
-        return Upstream(**dict(rows[0]))
+        return _upstream(dict(rows[0]))
 
     # -- OAuth server for clients ---------------------------------------------------------------
     async def put_oauth_app(self, client_id: str, name: str, uris: list[str], now: float) -> None:

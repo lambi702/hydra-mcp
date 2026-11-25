@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Built admin page (admin/dist). Served at /admin when it exists.
     admin_dist: Path | None = None
     upstream_timeout_s: float = 300.0
+    # Local (stdio) servers: the proxy runs the commands set in the admin page. Turn off on a
+    # shared host where the admin page must not be able to start programs.
+    stdio_enabled: bool = True
+    # A local server process unused for this long is stopped; the next call starts it again.
+    stdio_idle_s: float = 900.0
 
     @property
     def db_path(self) -> Path:

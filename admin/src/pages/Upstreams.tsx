@@ -82,12 +82,16 @@ export function Upstreams() {
               <td>{u.id}</td>
               <td>{u.name}</td>
               <td>
-                <code>{u.url}</code>
+                <code>{u.transport === "stdio" ? `${u.command} ${(u.args ?? []).join(" ")}` : u.url}</code>
               </td>
               <td className="actions">
-                <button onClick={() => void runProbe(u.id)}>Probe auth</button>
-                <button onClick={() => void openOAuth(u.id)}>OAuth client</button>
-                <button onClick={() => setDraft(u)}>Edit</button>
+                {u.transport !== "stdio" && (
+                  <>
+                    <button onClick={() => void runProbe(u.id)}>Probe auth</button>
+                    <button onClick={() => void openOAuth(u.id)}>OAuth client</button>
+                    <button onClick={() => setDraft(u)}>Edit</button>
+                  </>
+                )}
                 <button className="danger" onClick={() => void remove(u.id)}>
                   Delete
                 </button>
@@ -195,7 +199,7 @@ export function Upstreams() {
             required
             type="url"
             placeholder="https://…/mcp"
-            value={draft.url}
+            value={draft.url ?? ""}
             onChange={(e) => setDraft({ ...draft, url: e.target.value })}
           />
         </label>

@@ -123,6 +123,7 @@ proxy/src/hydra_mcp/
 │   ├── identity.py     "who is this token?" probes for servers without id_token
 │   ├── setup.py        one-time OAuth app guides (Google, GitHub, Asana, generic)
 │   ├── upstream.py     MCP client toward upstreams (Streamable HTTP, sessions, SSE)
+│   ├── stdio.py        MCP client toward local servers: one process per account
 │   ├── aggregator.py   merges tools, applies grants, routes calls
 │   └── endpoint.py     the /mcp endpoint apps connect to (client key or OAuth token)
 ├── clientauth.py       OAuth server for apps: metadata, DCR, consent, tokens
@@ -134,7 +135,8 @@ admin/src/              the admin page (React + Vite)
 
 ## Protocol support
 
-- Transport: Streamable HTTP toward apps and upstreams. Upstream responses may be JSON or SSE.
-  Legacy HTTP+SSE and stdio servers are not supported yet.
+- Transport: Streamable HTTP toward apps. Toward upstreams: Streamable HTTP (responses may be
+  JSON or SSE) and stdio for [local servers](local-servers.md), one process per account. Legacy
+  HTTP+SSE servers are not supported yet.
 - MCP versions negotiated with apps: 2025-11-25, 2025-06-18, 2025-03-26.
 - `/mcp` keeps no session state of its own: each request is served on its own.

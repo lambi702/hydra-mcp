@@ -1,9 +1,32 @@
 // Typed client for the proxy's admin API (/admin/api). Mirrors proxy/src/hydra_mcp/models.py.
 
+export type Transport = "http" | "stdio";
+
 export interface Upstream {
   id: string;
   name: string;
-  url: string;
+  transport?: Transport;
+  /** http only */
+  url: string | null;
+  /** stdio only: the program hydra-mcp starts, one process per account */
+  command?: string;
+  args?: string[];
+  /** stdio only: non-secret settings shared by every account (secrets are per account) */
+  env?: Record<string, string>;
+  isolate_home?: boolean;
+}
+
+export interface StdioConnectBody {
+  upstream_id?: string;
+  account_id?: string;
+  name?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  isolate_home?: boolean;
+  alias?: string;
+  identity?: string;
+  account_env: Record<string, string>;
 }
 
 export interface Account {
@@ -137,6 +160,8 @@ export interface Connector {
   docs: string;
   guide: ConnectorGuide | null;
   installed_as: string | null;
+  /** Each workspace needs its own OAuth client, hence its own server row (Slack). */
+  one_client_per_workspace?: boolean;
 }
 
 export interface Catalog {
@@ -214,7 +239,14 @@ export const api = {
   putAccount: (a: Account) => call<Account>("PUT", "/accounts", a),
   deleteAccount: (id: string) => call<void>("DELETE", `/accounts/${id}`),
   accountsStatus: () => call<Record<string, TokenStatus>>("GET", "/accounts-status"),
-  connect: (body: { connector_id?: string; upstream_id?: string; name?: string; url?: string }) =>
+  connect: (body: {
+    connector_id?: string;
+    upstream_id?: string;
+    name?: string;
+    url?: string;
+    /** a second server row with its own OAuth client (another Slack workspace) */
+    new_upstream?: boolean;
+  }) =>
     call<{ authorize_url: string; upstream_id: string }>("POST", "/connect", body),
   connectToken: (body: {
     token: string;
@@ -222,6 +254,12 @@ export const api = {
     upstream_id?: string;
     account_id?: string;
   }) => call<{ account: Account; created: boolean; upstream_id: string }>("POST", "/connect-token", body),
+  connectStdio: (body: StdioConnectBody) =>
+    call<{ account: Account; created: boolean; upstream_id: string; tools: number }>(
+      "POST",
+      "/connect-stdio",
+      body,
+    ),
   linkAccount: (id: string) => call<{ authorize_url: string }>("POST", `/accounts/${id}/link`),
   refreshIdentity: (id: string) =>
     call<{ identity: string; changed: boolean }>("POST", `/accounts/${id}/identity`),
