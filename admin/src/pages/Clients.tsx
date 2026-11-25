@@ -426,7 +426,7 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
       mcpServers: {
         hydra: {
           command: created.bridge_command ?? "hydra-mcp",
-          args: ["bridge"],
+          args: created.bridge_args ?? ["bridge"],
           env: { HYDRA_MCP_KEY: created.key, HYDRA_MCP_URL: created.endpoint },
         },
       },

@@ -122,6 +122,8 @@ export interface ClientKey {
   endpoint: string;
   /** absolute path of this installation's `hydra-mcp`, for stdio-only apps (Claude Desktop) */
   bridge_command?: string;
+  /** arguments for bridge_command: `["bridge"]`, or `["hydra-mcp", "bridge"]` under uvx */
+  bridge_args?: string[];
   /** set when HYDRA_MCP_EXTERNAL_URL is: the URL apps on the internet use (claude.ai) */
   external_endpoint?: string | null;
 }

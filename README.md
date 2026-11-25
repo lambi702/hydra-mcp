@@ -115,7 +115,7 @@ The full walkthrough is in [docs/getting-started.md](docs/getting-started.md).
 | Sign-in | Connectors |
 | --- | --- |
 | One click (the proxy registers itself) | Atlassian (Jira, Confluence), Linear, Notion, Sentry, Stripe, Cloudflare, Supabase |
-| One-time OAuth app, then one click | Gmail, Google Drive, Calendar, Docs, Sheets, Slides, Chat, Workspace search (Developer Preview), GitHub, Asana |
+| One-time OAuth app, then one click | Gmail, Google Drive, Calendar, Docs, Sheets, Slides, Chat, Workspace search (Developer Preview), GitHub, Asana, Slack (one app per workspace) |
 | Personal token also accepted | GitHub, Linear, Notion (Business), Stripe, Cloudflare, Supabase |
 
 Per-connector guides: [docs/connectors.md](docs/connectors.md). Missing one?
@@ -141,9 +141,9 @@ multi-user and hosted deployments are on the roadmap, not supported yet.
 
 | | |
 | --- | --- |
-| Done | Broker mode (one `/mcp`, per-app keys and grants, encrypted vault), router mode, connector library and guides, token login, admin page |
-| Now | One-line install (`uvx`, `pipx`, Docker), offline demo mode, more connectors tested end to end |
-| Next | stdio servers (one process per account), HTTPS for Claude Desktop and claude.ai, apps log in with OAuth instead of a static key, MCP 2026-07-28 (stateless) |
+| Done | Broker mode (one `/mcp`, per-app keys and grants, encrypted vault), router mode, connector library and guides, token login, admin page, one-line install (`uvx`, `pipx`, Docker), offline demo, local (stdio) servers with one process per account, claude.ai and Claude Desktop (OAuth login for apps, stdio bridge) |
+| Now | More connectors tested end to end with real accounts |
+| Next | MCP 2026-07-28 (stateless), accounts named by who logged in for every connector |
 
 The full plan, and where to help, is in [ROADMAP.md](ROADMAP.md).
 

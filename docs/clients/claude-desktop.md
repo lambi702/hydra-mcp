@@ -50,6 +50,10 @@ Claude Desktop --stdin/stdout--> hydra-mcp bridge --HTTP + key--> hydra-mcp serv
 }
 ```
 
+If you run hydra-mcp with `uvx`, the snippet instead says `"command": "/path/to/uvx"` and
+`"args": ["hydra-mcp", "bridge"]`: uvx keeps its environments in a cache it may clean, so the
+config must not point inside it.
+
 `hydra-mcp serve` must be running (see [running it in the background](../configuration.md#running-it-in-the-background)).
 The bridge itself keeps nothing: grants change in the admin page apply to the next call.
 

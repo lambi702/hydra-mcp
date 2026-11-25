@@ -6,6 +6,8 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
 ### Added
 
 - Local (stdio) servers: hydra-mcp starts a program (`npx …`, `uvx …`) once per account, each
@@ -45,6 +47,8 @@ All notable changes to hydra-mcp are listed here. The format follows
 - After a provider login, the browser returns to the absolute public URL of the admin page.
 - The public URL follows `--port`/`HYDRA_MCP_PORT` unless `HYDRA_MCP_PUBLIC_URL` is set, so
   changing the port no longer breaks OAuth callbacks.
+- The Claude Desktop snippet runs `uvx hydra-mcp bridge` when hydra-mcp itself runs from `uvx`,
+  whose environment lives in a cache uv may clean.
 
 ## [0.1.0] - 2026-11-24
 
@@ -64,5 +68,6 @@ All notable changes to hydra-mcp are listed here. The format follows
   Claude Code, Cursor and VS Code), Advanced.
 - Router mode: one URL per account, no token storage.
 
-[Unreleased]: https://github.com/lambi702/hydra-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lambi702/hydra-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lambi702/hydra-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lambi702/hydra-mcp/releases/tag/v0.1.0

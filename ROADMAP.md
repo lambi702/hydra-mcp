@@ -20,19 +20,23 @@ is the easiest way in.
 - **Admin page**: Home checklist, Connections, Clients with drag-and-drop grants, ready-made
   setup for Claude Code, Cursor and VS Code.
 
-## Now: try it in one minute (v0.2.0)
+## Done (v0.2.0)
 
-The goal of v0.2.0 is that someone who has never heard of hydra-mcp can see it work without
-cloning the repository or creating an OAuth app.
+- **One-line install**: `uvx hydra-mcp` and `pipx install hydra-mcp`, with the admin page
+  bundled in the package, plus a Docker image.
+- **Demo mode**: `hydra-mcp demo` starts a fake service with two accounts already connected, so
+  the whole flow works offline. Its recording is the GIF at the top of the README.
+- **stdio servers**: local MCP servers (`npx …`, `uvx …`), one process per account, each with
+  its own encrypted settings.
+- **Claude Desktop and claude.ai**: hydra-mcp is an OAuth server toward your apps (one click to
+  approve a new app), `HYDRA_MCP_EXTERNAL_URL` for a tunnel, and `hydra-mcp bridge` for Claude
+  Desktop's config file.
+- **Slack** connector (one Slack app per workspace).
 
-- **One-line install**: `uvx hydra-mcp` and `pipx install hydra-mcp` from PyPI, with the admin
-  page bundled in the package, plus a Docker image.
-- **Demo mode**: a fake MCP server with two fake accounts, started by hydra-mcp itself, so the
-  whole flow (connect, grant, call a tool with `account`) works offline.
-- **A 30-second demo** at the top of the README: two accounts of the same service, one AI app,
-  the tool asking which account to use.
-- **More connectors tested end to end** with real accounts: Gmail, GitHub, Slack, Notion and
-  Linear first, because those are the services people most often have twice.
+## Now: more connectors tested end to end
+
+- **Real accounts, two of each**: Gmail, GitHub, Slack, Notion and Linear first, because those
+  are the services people most often have twice.
 
 Where to help: test a connector you use with two real accounts and report what happened
 (the [connector template](https://github.com/lambi702/hydra-mcp/issues/new?template=connector_request.yml)
@@ -40,15 +44,10 @@ has the checklist), or pick a `connector` issue.
 
 ## Next
 
-- **stdio servers**: run local MCP servers (the ones started with `npx …` or `uvx …`), one
-  process per account, with that account's environment variables.
-- **Claude Desktop and claude.ai**: they only reach HTTPS URLs. Guides for a tunnel
-  (Cloudflare Tunnel, Tailscale Funnel, ngrok), then built-in HTTPS.
-- **Apps log in with OAuth** instead of a pasted `hmcp_…` key: hydra-mcp becomes an
-  authorization server toward your apps, so a new app is one click to approve.
 - **MCP 2026-07-28**: the stateless protocol version, alongside 2025-11-25.
 - **Identity for every connector**: every service should name its accounts by who logged in, so
   logging in again updates the account instead of creating a second one.
+- **Built-in HTTPS**, so claude.ai can reach hydra-mcp without a separate tunnel.
 
 ## Later
 

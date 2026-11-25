@@ -1,6 +1,6 @@
 [project]
 name = "hydra-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-account proxy in front of MCP servers. Login and consent stay with each upstream."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -108,3 +108,21 @@ def test_catalog_entries_are_valid_and_unique():
     ids = [c.id for c in cat.connectors]
     assert len(ids) == len(set(ids))
     assert all(str(c.url).startswith("https://") for c in cat.connectors)
+
+
+def test_bridge_argv_uses_uvx_from_a_uvx_cache(monkeypatch):
+    from hydra_mcp.admin import api
+
+    cache = "/home/u/.cache/uv/archive-v0/AbC123"
+    monkeypatch.setattr(api.sys, "prefix", cache)
+    monkeypatch.setattr(api.shutil, "which", lambda name: f"/opt/bin/{name}")
+    assert api._bridge_argv() == {
+        "bridge_command": "/opt/bin/uvx",
+        "bridge_args": ["hydra-mcp", "bridge"],
+    }
+
+    monkeypatch.setattr(api.sys, "prefix", "/home/u/hydra-mcp/proxy/.venv")
+    assert api._bridge_argv() == {
+        "bridge_command": "/opt/bin/hydra-mcp",
+        "bridge_args": ["bridge"],
+    }

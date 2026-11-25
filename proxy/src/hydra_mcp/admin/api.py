@@ -420,7 +420,9 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
                 "endpoint": f"{router.base_url}/mcp",
                 # For stdio-only apps (Claude Desktop's config file): this very installation's
                 # `hydra-mcp` executable, so the snippet works without anything on the PATH.
-                "bridge_command": _bridge_command(),
+                # Under `uvx` that executable lives in a cache uv may clean, so the snippet
+                # runs `uvx hydra-mcp bridge` instead.
+                **_bridge_argv(),
                 "external_endpoint": (
                     f"{services.external_url}/mcp" if services.external_url else None
                 ),
@@ -518,12 +520,21 @@ def _free_id(name: str, upstreams: list[Upstream]) -> str:
     return uid
 
 
-def _bridge_command() -> str:
+def _bridge_argv() -> dict[str, object]:
+    """`command` and `args` for a stdio app (Claude Desktop) to start `hydra-mcp bridge`."""
+    if _in_uv_cache(Path(sys.prefix)):
+        uvx = shutil.which("uvx") or "uvx"
+        return {"bridge_command": uvx, "bridge_args": ["hydra-mcp", "bridge"]}
     found = shutil.which("hydra-mcp")
-    if found:
-        return found
-    exe = Path(sys.executable).parent / ("hydra-mcp.exe" if os.name == "nt" else "hydra-mcp")
-    return str(exe)
+    if not found:
+        exe = Path(sys.executable).parent / ("hydra-mcp.exe" if os.name == "nt" else "hydra-mcp")
+        found = str(exe)
+    return {"bridge_command": found, "bridge_args": ["bridge"]}
+
+
+def _in_uv_cache(prefix: Path) -> bool:
+    """True for the throwaway environments `uvx` builds (`<uv cache>/archive-v0/<hash>`)."""
+    return any(part.startswith("archive-v") for part in prefix.parts)
 
 
 async def _as_metadata(router: Router, issuer: str) -> dict:
