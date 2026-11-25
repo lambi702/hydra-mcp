@@ -299,6 +299,20 @@ async def test_mcp_requires_a_client_key_and_a_loopback_origin(env):
     assert (await proxy.post("/mcp", json=ping, headers=headers)).status_code == 401
 
 
+async def test_setup_info_does_not_rotate_the_key(env):
+    """Showing an app's setup must not break the apps already using the client's key."""
+    proxy, _ = env
+    ping = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+    headers = await client_key(proxy)
+    r = await proxy.get("/admin/api/setup", headers=H)
+    assert r.status_code == 200
+    info = r.json()
+    assert info["endpoint"] == "http://proxy.test/mcp" and "key" not in info
+    assert info["bridge_command"] and info["external_endpoint"] is None
+    assert (await proxy.post("/mcp", json=ping, headers=headers)).status_code == 200
+    assert (await proxy.get("/admin/api/setup")).status_code == 401
+
+
 async def test_tools_are_aggregated_with_an_account_argument_per_grant(env):
     proxy, provider = env
     headers = await client_key(proxy)

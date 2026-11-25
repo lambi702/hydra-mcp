@@ -127,8 +127,22 @@ export function Clients() {
     if (name && name.trim() && name.trim() !== c.name) await save({ ...c, name: name.trim() }, "Renamed");
   }
 
+  async function showSetup(c: Client) {
+    try {
+      setSetup({ client: c, key: await api.setupInfo() });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function newKey(c: Client) {
-    if (keys.data?.includes(c.id) && !window.confirm(`Replace the key of "${c.name}"? The old one stops working.`)) return;
+    if (
+      keys.data?.includes(c.id) &&
+      !window.confirm(
+        `Replace the key of "${c.name}"? Every app using the current key (Claude Code, Cursor, Claude Desktop…) stops working until you paste the new one. To see the setup without changing the key, use "Setup".`,
+      )
+    )
+      return;
     try {
       setSetup({ client: c, key: await api.createClientKey(c.id) });
       await keys.reload();
@@ -213,9 +227,18 @@ export function Clients() {
                   ))}
                 </div>
                 <div className="actions">
-                  <button className={keys.data?.includes(c.id) ? "" : "primary"} onClick={() => void newKey(c)}>
-                    {keys.data?.includes(c.id) ? "New key" : "Get setup"}
-                  </button>
+                  {keys.data?.includes(c.id) || loginsOf(c.id).length > 0 ? (
+                    <>
+                      <button className="primary" onClick={() => void showSetup(c)}>
+                        Setup
+                      </button>
+                      <button onClick={() => void newKey(c)}>New key</button>
+                    </>
+                  ) : (
+                    <button className="primary" onClick={() => void newKey(c)}>
+                      Get setup
+                    </button>
+                  )}
                   <button onClick={() => void rename(c)}>Rename</button>
                   <button className="danger" onClick={() => void remove(c)}>
                     Delete
@@ -417,7 +440,10 @@ function NewClient({ onCreate, onCancel }: { onCreate: (name: string) => void; o
 
 /** Shown once, right after creation: only the key's hash is stored on the proxy. */
 function KeyCard({ client, created, onClose }: { client: Client; created: ClientKey; onClose: () => void }) {
-  const auth = `Bearer ${created.key}`;
+  // Without a fresh key (Setup on a client that already has one), snippets show a placeholder:
+  // the proxy only keeps the key's hash, so it cannot show the current key again.
+  const key = created.key ?? "hmcp_PASTE_THIS_CLIENTS_KEY";
+  const auth = `Bearer ${key}`;
   const claude = `claude mcp add --scope user --transport http hydra ${created.endpoint} --header "Authorization: ${auth}"`;
   const cursor = JSON.stringify({ mcpServers: { hydra: { url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
   const vscode = JSON.stringify({ servers: { hydra: { type: "http", url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
@@ -427,7 +453,7 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
         hydra: {
           command: created.bridge_command ?? "hydra-mcp",
           args: created.bridge_args ?? ["bridge"],
-          env: { HYDRA_MCP_KEY: created.key, HYDRA_MCP_URL: created.endpoint },
+          env: { HYDRA_MCP_KEY: key, HYDRA_MCP_URL: created.endpoint },
         },
       },
     },
@@ -449,7 +475,7 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
   const snippets: Record<string, { label: string; where: string; text: string }> = {
     claude: {
       label: "Claude Code",
-      where: "Run this in a terminal. Add --scope user to have it in every project.",
+      where: "Run this in a terminal. --scope user makes it available in every folder.",
       text: claude,
     },
     vscode: {
@@ -471,7 +497,7 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
     web: {
       label: "claude.ai",
       where: created.external_endpoint
-        ? "claude.ai, Settings, Connectors, Add custom connector: paste this URL, leave the OAuth fields empty, then Connect. On hydra-mcp's page, pick this client and type your admin token. No key needed: you can ignore the one above."
+        ? "claude.ai, Settings, Connectors, Add custom connector: paste this URL, leave the OAuth fields empty, then Connect. On hydra-mcp's page, pick this client and type your admin token. No key needed."
         : "claude.ai connects from Anthropic's servers, so it needs hydra-mcp on a public HTTPS URL (a tunnel) and HYDRA_MCP_EXTERNAL_URL set to it. See docs/clients/claude-ai.md, then come back here.",
       text: created.external_endpoint ?? "HYDRA_MCP_EXTERNAL_URL=https://<your tunnel host>",
     },
@@ -485,7 +511,14 @@ function KeyCard({ client, created, onClose }: { client: Client; created: Client
   const current = snippets[shown];
   return (
     <div className="setup">
-      <p className="warn-text">Copy it now: the key is not stored and will not be shown again.</p>
+      {created.key ? (
+        <p className="warn-text">Copy it now: the key is not stored and will not be shown again.</p>
+      ) : (
+        <p className="muted small">
+          Replace <code>hmcp_PASTE_THIS_CLIENTS_KEY</code> with this client's key (the one you copied when you created it).
+          Lost it? <strong>New key</strong> makes a new one, and the apps using the old one must get the new one.
+        </p>
+      )}
       <div className="seg" role="tablist">
         {[...order, "other"].map((k) => (
           <button key={k} role="tab" aria-selected={k === shown} className={k === shown ? "active" : ""} onClick={() => setShown(k)}>

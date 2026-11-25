@@ -8,6 +8,9 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ### Fixed
 
+- Clients: a **Setup** button shows the setup for every app without replacing the key. Before,
+  the only way to see the claude.ai or Claude Desktop setup of a client that had a key was
+  **New key**, which silently broke the apps using the old key. `GET /admin/api/setup`.
 - Google connectors: the guides now list enrollment of the Google Cloud project in the Workspace
   Developer Preview as a required step (found testing Gmail with a real account: login works,
   every tool call is refused until the project is enrolled).

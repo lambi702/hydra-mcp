@@ -118,7 +118,8 @@ export interface UpstreamOAuth {
 }
 
 export interface ClientKey {
-  key: string;
+  /** only right after POST /clients/{id}/key; absent when setup is shown without a new key */
+  key?: string;
   endpoint: string;
   /** absolute path of this installation's `hydra-mcp`, for stdio-only apps (Claude Desktop) */
   bridge_command?: string;
@@ -273,6 +274,7 @@ export const api = {
   clients: () => call<Client[]>("GET", "/clients"),
   clientsWithKey: () => call<string[]>("GET", "/clients-with-key"),
   createClientKey: (id: string) => call<ClientKey>("POST", `/clients/${id}/key`),
+  setupInfo: () => call<ClientKey>("GET", "/setup"),
   revokeClientKey: (id: string) => call<void>("DELETE", `/clients/${id}/key`),
   appLogins: () => call<AppLogin[]>("GET", "/app-logins"),
   deleteAppLogin: (id: string) => call<void>("DELETE", `/app-logins/${id}`),

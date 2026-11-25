@@ -406,6 +406,23 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             }
         )
 
+    def _setup_info() -> dict:
+        return {
+            "endpoint": f"{router.base_url}/mcp",
+            # For stdio-only apps (Claude Desktop's config file): this very installation's
+            # `hydra-mcp` executable, so the snippet works without anything on the PATH.
+            # Under `uvx` that executable lives in a cache uv may clean, so the snippet
+            # runs `uvx hydra-mcp bridge` instead.
+            **_bridge_argv(),
+            "external_endpoint": (
+                f"{services.external_url}/mcp" if services.external_url else None
+            ),
+        }
+
+    async def setup_info(request: Request) -> Response:
+        """What an app needs to connect, without a key: showing setup must not rotate it."""
+        return JSONResponse(_setup_info())
+
     async def client_key(request: Request) -> Response:
         """POST: create (or rotate) the client's key; it is shown once. DELETE: revoke it."""
         client_id = request.path_params["id"]
@@ -414,21 +431,7 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             return Response(status_code=204)
         key = KEY_PREFIX + secrets.token_urlsafe(32)
         await store.set_client_key_hash(client_id, hash_key(key))
-        return JSONResponse(
-            {
-                "key": key,
-                "endpoint": f"{router.base_url}/mcp",
-                # For stdio-only apps (Claude Desktop's config file): this very installation's
-                # `hydra-mcp` executable, so the snippet works without anything on the PATH.
-                # Under `uvx` that executable lives in a cache uv may clean, so the snippet
-                # runs `uvx hydra-mcp bridge` instead.
-                **_bridge_argv(),
-                "external_endpoint": (
-                    f"{services.external_url}/mcp" if services.external_url else None
-                ),
-            },
-            201,
-        )
+        return JSONResponse({"key": key, **_setup_info()}, 201)
 
     async def app_logins(request: Request) -> Response:
         """Apps signed in through OAuth (claude.ai...), with the client each one acts as."""
@@ -501,6 +504,7 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             guarded(upstream_oauth),
             methods=["GET", "PUT", "DELETE"],
         ),
+        Route(f"{p}/setup", guarded(setup_info), methods=["GET"]),
         Route(f"{p}/clients/{{id}}/key", guarded(client_key), methods=["POST", "DELETE"]),
         Route(f"{p}/clients-with-key", guarded(clients_with_key), methods=["GET"]),
         Route(f"{p}/app-logins", guarded(app_logins), methods=["GET"]),
