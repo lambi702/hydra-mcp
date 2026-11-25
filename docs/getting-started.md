@@ -113,11 +113,12 @@ key is shown once: hydra-mcp only keeps its SHA-256 hash. Lost it? **New key** r
 **Claude Code**
 
 ```bash
-claude mcp add --transport http hydra http://127.0.0.1:8765/mcp \
+claude mcp add --scope user --transport http hydra http://127.0.0.1:8765/mcp \
   --header "Authorization: Bearer hmcp_…"
 ```
 
-Add `--scope user` to have it in every project.
+`--scope user` makes hydra available in every folder. Without it, Claude Code only sees it in the
+folder where you ran the command.
 
 **Cursor** (`~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project)
 

@@ -186,7 +186,7 @@ hydra-mcp {__version__}: demo mode
      (pick Initech). Clients: drag accounts into "Claude Code (demo)".
 
   2. Use it from Claude Code (the client sees acme read + write, globex read only)
-     claude mcp add --transport http hydra-demo {mcp} \\
+     claude mcp add --scope user --transport http hydra-demo {mcp} \\
        --header "Authorization: Bearer {key}"
      Then ask: "List the open issues in acme and in globex."
      Remove it afterwards: claude mcp remove hydra-demo

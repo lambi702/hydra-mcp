@@ -418,7 +418,7 @@ function NewClient({ onCreate, onCancel }: { onCreate: (name: string) => void; o
 /** Shown once, right after creation: only the key's hash is stored on the proxy. */
 function KeyCard({ client, created, onClose }: { client: Client; created: ClientKey; onClose: () => void }) {
   const auth = `Bearer ${created.key}`;
-  const claude = `claude mcp add --transport http hydra ${created.endpoint} --header "Authorization: ${auth}"`;
+  const claude = `claude mcp add --scope user --transport http hydra ${created.endpoint} --header "Authorization: ${auth}"`;
   const cursor = JSON.stringify({ mcpServers: { hydra: { url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
   const vscode = JSON.stringify({ servers: { hydra: { type: "http", url: created.endpoint, headers: { Authorization: auth } } } }, null, 2);
   const desktop = JSON.stringify(

@@ -96,7 +96,7 @@ Then:
 3. **Get setup**: copy the ready-made config for Claude Code, Cursor or VS Code.
 
 ```bash
-claude mcp add --transport http hydra http://127.0.0.1:8765/mcp \
+claude mcp add --scope user --transport http hydra http://127.0.0.1:8765/mcp \
   --header "Authorization: Bearer hmcp_…"
 ```
 

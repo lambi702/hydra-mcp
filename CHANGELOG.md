@@ -6,6 +6,11 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The Claude Code setup command now uses `--scope user`: without it, Claude Code only saw hydra
+  in the folder where the command was run.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added
