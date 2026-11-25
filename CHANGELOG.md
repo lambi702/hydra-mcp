@@ -6,6 +6,23 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- One-line install: `uvx hydra-mcp` or `pipx install hydra-mcp`. The wheel ships the admin page,
+  so Node is no longer needed to run hydra-mcp.
+- `hydra-mcp demo`: a fake provider (Demo Tracker) served by the proxy, with two accounts already
+  connected through the real OAuth flow and a ready client, in a throwaway data directory.
+- Docker image `ghcr.io/lambi702/hydra-mcp` (amd64 and arm64, non-root, healthcheck) and a
+  `compose.yaml`.
+- Release workflow publishing to PyPI (trusted publishing) and ghcr.io; CI now builds and
+  smoke-tests the wheel and the image on every PR.
+- `hydra-mcp serve --open` opens the admin page; `hydra-mcp` alone means `hydra-mcp serve`.
+
+### Changed
+
+- The public URL follows `--port`/`HYDRA_MCP_PORT` unless `HYDRA_MCP_PUBLIC_URL` is set, so
+  changing the port no longer breaks OAuth callbacks.
+
 ## [0.1.0] - 2026-11-24
 
 ### Added

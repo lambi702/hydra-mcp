@@ -4,6 +4,23 @@ version = "0.1.0"
 description = "Multi-account proxy in front of MCP servers. Login and consent stay with each upstream."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "hydra-mcp contributors" }]
+keywords = ["mcp", "model-context-protocol", "proxy", "oauth", "multi-account", "claude"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "starlette>=0.41",
     "uvicorn[standard]>=0.32",
@@ -13,6 +30,12 @@ dependencies = [
     "aiosqlite>=0.20",
     "cryptography>=43",
 ]
+
+[project.urls]
+Homepage = "https://github.com/lambi702/hydra-mcp"
+Documentation = "https://github.com/lambi702/hydra-mcp/tree/main/docs"
+Issues = "https://github.com/lambi702/hydra-mcp/issues"
+Changelog = "https://github.com/lambi702/hydra-mcp/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hydra-mcp = "hydra_mcp.cli:main"
@@ -27,6 +50,14 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build]
+# The built admin page is copied into src/hydra_mcp/web by `make build` (and by the release
+# workflow). It is git-ignored, so it must be listed here to be shipped in the sdist and wheel.
+artifacts = ["src/hydra_mcp/web/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/hydra_mcp", "tests", "README.md", "LICENSE"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hydra_mcp"]

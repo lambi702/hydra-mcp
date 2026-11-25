@@ -2,25 +2,32 @@
 
 hydra-mcp works without configuration. Settings come from environment variables prefixed with
 `HYDRA_MCP_`, or from a `.env` file in the directory you start it from (`proxy/` with `make
-proxy`). A template is in [`.env.example`](../.env.example).
+proxy`). With Docker, pass them with `-e` (the image sets `HYDRA_MCP_HOST=0.0.0.0` and
+`HYDRA_MCP_DATA_DIR=/data`). A template is in [`.env.example`](../.env.example).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `HYDRA_MCP_HOST` | `127.0.0.1` | Interface to listen on. Keep the loopback default unless you know why not (see [security](security.md)). |
 | `HYDRA_MCP_PORT` | `8765` | Port. |
-| `HYDRA_MCP_PUBLIC_URL` | `http://127.0.0.1:8765` | The URL your apps and browser use to reach the proxy. It builds the OAuth callback (`<public URL>/oauth/callback`) and the router-mode resources, so it must match exactly what you register at providers and paste into apps. Change it together with the port. |
+| `HYDRA_MCP_PUBLIC_URL` | `http://127.0.0.1:<port>` | The URL your apps and browser use to reach the proxy. When unset it follows the port (and the host, unless that is `0.0.0.0`). Set it behind a tunnel, a reverse proxy, or a Docker port mapped to another host port. It builds the OAuth callback (`<public URL>/oauth/callback`) and the router-mode resources, so it must match exactly what you register at providers and paste into apps. Change it together with the port. |
 | `HYDRA_MCP_DATA_DIR` | `~/.hydra-mcp` | Database, vault key and admin token. |
 | `HYDRA_MCP_ADMIN_TOKEN` | generated | Fixed admin token. When empty, one is generated on first start and kept in `<data dir>/admin_token`. |
-| `HYDRA_MCP_ADMIN_DIST` | `admin/dist` of the checkout | Built admin page to serve at `/admin/`. |
+| `HYDRA_MCP_ADMIN_DIST` | the packaged page | Built admin page to serve at `/admin/`. By default: `admin/dist` in a source checkout after `make build`, else the copy shipped inside the package. |
 | `HYDRA_MCP_UPSTREAM_TIMEOUT_S` | `300` | Timeout for calls to upstream servers, in seconds. |
 
-Command-line flags: `hydra-mcp serve [--host H] [--port P] [--reload]` and `hydra-mcp
-admin-token` (prints the admin token).
+Commands:
+
+| Command | What it does |
+| --- | --- |
+| `hydra-mcp` or `hydra-mcp serve [--host H] [--port P] [--open] [--reload]` | Run the proxy. `--open` opens the admin page in your browser; `--reload` is for development. |
+| `hydra-mcp demo [--port P] [--no-open]` | Run the demo: a fake provider and two connected accounts, in a temporary data directory deleted on exit. Ignores `HYDRA_MCP_DATA_DIR` and `HYDRA_MCP_ADMIN_TOKEN`. |
+| `hydra-mcp admin-token` | Print the admin token. |
+| `hydra-mcp --version` | Print the version. |
 
 ## Changing the port
 
 ```bash
-HYDRA_MCP_PORT=9000 HYDRA_MCP_PUBLIC_URL=http://127.0.0.1:9000 uv run hydra-mcp serve
+hydra-mcp --port 9000          # the public URL follows: http://127.0.0.1:9000
 ```
 
 Then update the callback URL in the OAuth apps you created by hand (Google, GitHub, Asana) and the
@@ -48,9 +55,8 @@ then `launchctl load ~/Library/LaunchAgents/dev.hydra-mcp.plist`.
 <plist version="1.0">
 <dict>
   <key>Label</key><string>dev.hydra-mcp</string>
-  <key>WorkingDirectory</key><string>/Users/YOU/hydra-mcp/proxy</string>
   <key>ProgramArguments</key>
-  <array><string>/opt/homebrew/bin/uv</string><string>run</string><string>hydra-mcp</string><string>serve</string></array>
+  <array><string>/opt/homebrew/bin/uvx</string><string>hydra-mcp</string><string>serve</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>/Users/YOU/.hydra-mcp/proxy.log</string>
@@ -67,13 +73,15 @@ then `launchctl load ~/Library/LaunchAgents/dev.hydra-mcp.plist`.
 Description=hydra-mcp
 
 [Service]
-WorkingDirectory=%h/hydra-mcp/proxy
-ExecStart=%h/.local/bin/uv run hydra-mcp serve
+ExecStart=%h/.local/bin/uvx hydra-mcp serve
 Restart=on-failure
 
 [Install]
 WantedBy=default.target
 ```
+
+**Docker**: `--restart unless-stopped` on `docker run`, or `docker compose up -d` with the
+repository's [`compose.yaml`](../compose.yaml), keeps it running across reboots.
 
 The log contains the admin login link: keep it in the data directory or another private place.
 

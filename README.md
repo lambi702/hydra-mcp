@@ -18,8 +18,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/connections.png" width="820" alt="The Connections page: three Atlassian accounts and two GitHub accounts, each showing which AI app may use it" />
+  <img src="docs/assets/demo.gif" width="820" alt="Adding a third account of the same service through the provider's sign-in page, giving an AI app read access to it, then the AI calling one tool with account acme or initech and getting each workspace's own issues" />
 </p>
+
+<p align="center"><sub>Recorded from <code>uvx hydra-mcp demo</code>: try it yourself in a minute, no account needed.</sub></p>
 
 ## Why
 
@@ -64,15 +66,29 @@ with that account's token.
 
 ## Quick start
 
-Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 20+.
+**Try it first**: a demo with a fake provider and two accounts already connected, no sign-up and
+no OAuth app. It runs in a throwaway folder and never touches your real setup.
 
 ```bash
-git clone https://github.com/lambi702/hydra-mcp && cd hydra-mcp
-make install build     # Python and Node dependencies, then the admin page
-make proxy             # starts on http://127.0.0.1:8765
+uvx hydra-mcp demo
 ```
 
-The terminal prints an **admin page** link that logs you in. Then:
+**Install** (Python 3.11+; the admin page is included, no Node needed):
+
+```bash
+uvx hydra-mcp                # run the latest release, nothing to install (needs uv)
+pipx install hydra-mcp       # or install the `hydra-mcp` command
+```
+
+**Or with Docker:**
+
+```bash
+docker run -d --name hydra-mcp -p 127.0.0.1:8765:8765 -v hydra-mcp:/data ghcr.io/lambi702/hydra-mcp
+docker logs hydra-mcp        # prints the admin page link
+```
+
+The proxy starts on `http://127.0.0.1:8765` and prints an **admin page** link that logs you in.
+Then:
 
 1. **Connections**: pick a connector, sign in on the provider's page, name the account. Repeat
    for each account.
@@ -85,6 +101,10 @@ claude mcp add --transport http hydra http://127.0.0.1:8765/mcp \
 ```
 
 The full walkthrough is in [docs/getting-started.md](docs/getting-started.md).
+
+<p align="center">
+  <img src="docs/assets/connections.png" width="820" alt="The Connections page: three Atlassian accounts and two GitHub accounts, each showing which AI app may use it" />
+</p>
 
 <p align="center">
   <img src="docs/assets/clients.png" width="820" alt="The Clients page: accounts dragged into a client's read only and read + write zones" />
@@ -105,7 +125,7 @@ Per-connector guides: [docs/connectors.md](docs/connectors.md). Missing one?
 
 | | |
 | --- | --- |
-| [Getting started](docs/getting-started.md) | Install, connect accounts, set up Claude Code, Cursor, VS Code |
+| [Getting started](docs/getting-started.md) | Demo, install (uvx, pipx, Docker, source), connect accounts, set up Claude Code, Cursor, VS Code |
 | [Connector guides](docs/connectors.md) | What each service needs, multi-account notes, pitfalls, official docs |
 | [How it works](docs/architecture.md) | Broker and router modes, the OAuth flows, tool aggregation, storage |
 | [Security model](docs/security.md) | What is stored, what is encrypted, threat model, hardening |

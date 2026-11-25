@@ -53,3 +53,49 @@ jobs:
           cache-dependency-path: admin/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  package:
+    # The artifact people install: wheel with the admin page inside, run from a clean venv.
+    name: Package (wheel + demo smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: "3.13"
+      - run: cd admin && npm ci
+      - run: make package
+      - run: scripts/check-dist.sh proxy/dist
+
+  docker:
+    name: Docker image (build + demo smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: hydra-mcp:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run the demo in the container
+        run: |
+          docker run -d --name demo -p 127.0.0.1:8765:8765 hydra-mcp:ci demo
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8765/healthz && break; sleep 1; done
+          curl -fs -o /dev/null http://127.0.0.1:8765/admin/
+          key=$(docker logs demo 2>&1 | grep -o 'hmcp_[A-Za-z0-9_-]*' | head -1)
+          curl -fs http://127.0.0.1:8765/mcp -H "Authorization: Bearer $key" \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | grep -q demo__search_issues
+          docker exec demo id -u | grep -qx 10001

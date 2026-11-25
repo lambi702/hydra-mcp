@@ -1,0 +1,14 @@
+.git
+.github
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+admin/dist
+proxy/dist
+proxy/src/hydra_mcp/web
+docs
+scripts
+*.sqlite3
+.env

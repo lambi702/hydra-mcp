@@ -1,0 +1,15 @@
+# docker compose up -d   then   docker compose logs hydra-mcp   for the admin page link.
+services:
+  hydra-mcp:
+    image: ghcr.io/lambi702/hydra-mcp:latest
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765" # loopback only: the proxy holds your tokens
+    volumes:
+      - hydra-mcp:/data # database, vault key and admin token
+    environment:
+      # The exact URL your MCP clients and browser use; change it with the port or behind a tunnel.
+      HYDRA_MCP_PUBLIC_URL: http://127.0.0.1:8765
+    restart: unless-stopped
+volumes:
+  hydra-mcp:

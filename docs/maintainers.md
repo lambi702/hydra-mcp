@@ -46,12 +46,46 @@ scripts/setup-github.sh     # safe to run again; REPO=owner/name to target anoth
 
 ## Releasing
 
+Releases are built by [`.github/workflows/release.yml`](../.github/workflows/release.yml): the
+wheel and sdist (with the admin page inside, checked by `scripts/check-dist.sh`) go to PyPI, and
+the Docker image (linux/amd64 and arm64) to `ghcr.io/lambi702/hydra-mcp`.
+
+### One-time setup (before the first PyPI release)
+
+1. **PyPI trusted publisher**: on pypi.org, *Your projects*, *Publishing*, *Add a new pending
+   publisher*: project `hydra-mcp`, owner `lambi702`, repository `hydra-mcp`, workflow
+   `release.yml`, environment `pypi`. No API token is created or stored.
+2. **GitHub environment**: Settings, Environments, *New environment* `pypi`. Add yourself as a
+   required reviewer: every PyPI upload then waits for one click.
+3. **Image visibility**: after the first image push, set the `hydra-mcp` package on GitHub to
+   public (Packages, Package settings) and link it to the repository if it is not.
+
+### Each release
+
 1. Move the *Unreleased* entries of `CHANGELOG.md` under a new version heading with the date.
 2. Bump `version` in `proxy/pyproject.toml`, `proxy/src/hydra_mcp/__init__.py` and
-   `admin/package.json`.
+   `admin/package.json` (the workflow refuses a tag that does not match).
 3. Merge that as a PR titled `Release vX.Y.Z`.
 4. Tag and publish: `git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`, then
-   `gh release create vX.Y.Z --notes-from-tag` (or paste the changelog section).
+   `gh release create vX.Y.Z --notes-from-tag` (or paste the changelog section). Publishing the
+   release starts the workflow; approve the `pypi` deployment when asked.
+5. Check: `uvx hydra-mcp@X.Y.Z --version` and
+   `docker run --rm ghcr.io/lambi702/hydra-mcp:X.Y.Z --version`.
+
+To rehearse without publishing, run the workflow by hand (Actions, Release, *Run workflow*): it
+builds and checks the package and the image, and pushes nothing.
+
+### The README GIF
+
+`docs/assets/demo.gif` is recorded from the demo, so it can be redone after any UI change:
+
+```bash
+uvx hydra-mcp demo --no-open          # or: make demo, in a checkout
+node scripts/record-demo.mjs "<admin page link it printed>" docs/assets/demo.gif
+```
+
+The script needs Playwright with Chromium and ffmpeg. It drives the real admin page and the
+real OAuth flow, and its last scene shows real responses from the proxy.
 
 ## Triage
 

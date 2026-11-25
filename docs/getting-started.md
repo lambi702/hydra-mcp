@@ -4,30 +4,62 @@ This walks through a first setup: install, connect two accounts of the same serv
 app access, and use it. Count about ten minutes, more if a service needs a one-time OAuth app
 (Google, GitHub, Asana).
 
+## 0. Try the demo (optional, one minute)
+
+```bash
+uvx hydra-mcp demo        # or: docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/lambi702/hydra-mcp demo
+```
+
+The demo starts the proxy with a fake provider, *Demo Tracker*, served by the proxy itself. It
+behaves like a real remote MCP server (discovery, dynamic client registration, a sign-in page,
+PKCE, tokens), and two of its workspaces, `acme` and `globex`, are already connected through that
+flow. The terminal prints the admin page link and a ready `claude mcp add` command for a client
+that sees `acme` read + write and `globex` read only. In the admin page, **+ Add another
+account** on Demo Tracker opens its sign-in page, where you pick a third workspace.
+
+Everything lives in memory and in a temporary folder that is deleted when you stop it (Ctrl+C):
+the demo never touches `~/.hydra-mcp`.
+
 ## 1. Install and start
 
-Requirements: Python 3.11 or newer, [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Node 20 or newer (only to build the admin page).
+Pick one. All three serve the admin page; none needs Node.
+
+```bash
+uvx hydra-mcp                  # uv runs the latest release in a cached environment
+pipx install hydra-mcp && hydra-mcp     # or a permanent `hydra-mcp` command
+```
+
+```bash
+docker run -d --name hydra-mcp -p 127.0.0.1:8765:8765 -v hydra-mcp:/data ghcr.io/lambi702/hydra-mcp
+docker logs hydra-mcp          # the admin page link
+```
+
+With Docker, publish the port on `127.0.0.1` as above: the proxy holds your tokens, and the
+container listens on all its interfaces. Your data is in the `hydra-mcp` volume. If you map
+another host port, set `-e HYDRA_MCP_PUBLIC_URL=http://127.0.0.1:<port>` too. A
+[`compose.yaml`](../compose.yaml) is in the repository.
+
+**From source** (to contribute; needs uv and Node 20+):
 
 ```bash
 git clone https://github.com/lambi702/hydra-mcp && cd hydra-mcp
-make install     # cd proxy && uv sync; cd admin && npm install
-make build       # builds the admin page into admin/dist
-make proxy       # cd proxy && uv run hydra-mcp serve
+make install build     # Python and Node dependencies, then the admin page
+make proxy             # cd proxy && uv run hydra-mcp serve
 ```
 
 The terminal prints:
 
 ```
-hydra-mcp 0.1.0
-  proxy      http://127.0.0.1:8765
-  admin page http://127.0.0.1:8765/admin/#token=…
-             (open this link: it logs you in; keep it private)
+hydra-mcp 0.2.0
+  MCP endpoint  http://127.0.0.1:8765/mcp
+  admin page    http://127.0.0.1:8765/admin/#token=…
+                (this link logs you in: keep it private)
 ```
 
 Open the admin page link. The token after `#` is never sent to a server; the page stores it in
-your browser and removes it from the address bar. Lost it? `cd proxy && uv run hydra-mcp
-admin-token` prints it again.
+your browser and removes it from the address bar. Lost it? `hydra-mcp admin-token` prints it again
+(`docker exec hydra-mcp hydra-mcp admin-token` with Docker, `cd proxy && uv run hydra-mcp
+admin-token` from source). Add `--open` to `hydra-mcp serve` to open it in your browser.
 
 Everything hydra-mcp keeps lives in `~/.hydra-mcp` (see [Configuration](configuration.md)).
 

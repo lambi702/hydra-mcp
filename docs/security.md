@@ -97,8 +97,11 @@ output to a file): treat it like a password.
 
 ## Hardening checklist
 
-- Keep the default `HYDRA_MCP_HOST=127.0.0.1`.
-- Use full-disk encryption; keep `~/.hydra-mcp` out of cloud-synced folders.
+- Keep the default `HYDRA_MCP_HOST=127.0.0.1`. With Docker, the container listens on all its
+  interfaces, so publish the port on the host's loopback only: `-p 127.0.0.1:8765:8765`, never
+  `-p 8765:8765`.
+- Use full-disk encryption; keep `~/.hydra-mcp` (or the Docker volume) out of cloud-synced
+  folders and unencrypted backups.
 - One client per app; *read only* by default; tool patterns for write grants.
 - Prefer fine-grained, expiring personal tokens over classic ones when you paste a token.
 - Rotate a client key (**New key**) if a config file containing it was shared or committed.
