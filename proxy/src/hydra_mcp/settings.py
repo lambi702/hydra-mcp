@@ -18,12 +18,22 @@ class Settings(BaseSettings):
     # URL clients use to reach the proxy. It becomes the OAuth `resource` of every account route,
     # so it must be exactly what you paste into your MCP client.
     public_url: str = "http://127.0.0.1:8765"
+    # Optional HTTPS URL of this proxy on the internet (a tunnel), for apps that connect from
+    # their own servers: claude.ai, Claude Desktop custom connectors, mobile. Only the MCP
+    # endpoint and the OAuth login of apps are served under it; the admin page, the admin
+    # API, upstream callbacks and router mode stay local-only.
+    external_url: str = ""
     data_dir: Path = Field(default_factory=lambda: Path.home() / ".hydra-mcp")
     # Leave empty to generate one on first start (stored in data_dir/admin_token).
     admin_token: str = ""
     # Built admin page (admin/dist). Served at /admin when it exists.
     admin_dist: Path | None = None
     upstream_timeout_s: float = 300.0
+    # Local (stdio) servers: the proxy runs the commands set in the admin page. Turn off on a
+    # shared host where the admin page must not be able to start programs.
+    stdio_enabled: bool = True
+    # A local server process unused for this long is stopped; the next call starts it again.
+    stdio_idle_s: float = 900.0
 
     @property
     def db_path(self) -> Path:
@@ -32,6 +42,10 @@ class Settings(BaseSettings):
     @property
     def base_url(self) -> str:
         return self.public_url.rstrip("/")
+
+    @property
+    def external_base_url(self) -> str:
+        return self.external_url.rstrip("/")
 
     @cached_property
     def resolved_admin_token(self) -> str:

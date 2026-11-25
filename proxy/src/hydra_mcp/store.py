@@ -6,6 +6,7 @@ ever written here already encrypted by the vault; client keys are stored as SHA-
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import aiosqlite
@@ -58,6 +59,38 @@ CREATE TABLE IF NOT EXISTS account_tokens (
 -- In-flight "connect" flows (state is single use, short lived). account_id is NULL for a new
 -- connection: the account is created only once the login succeeded, so a cancelled or failed
 -- login leaves nothing behind in the account list.
+-- hydra-mcp as an OAuth server for its own clients (claude.ai, Claude Desktop...).
+CREATE TABLE IF NOT EXISTS oauth_apps (
+    client_id     TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    redirect_uris TEXT NOT NULL,  -- JSON list
+    created_at    REAL NOT NULL
+);
+-- Short-lived, single-use rows: consent requests ('pending') and authorization codes ('code').
+CREATE TABLE IF NOT EXISTS oauth_transient (
+    id         TEXT PRIMARY KEY,  -- request id, or SHA-256 of the code
+    kind       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    expires_at REAL NOT NULL
+);
+-- One row per approved login of an app: the hydra client it acts as, and its current tokens
+-- (SHA-256 only). The previous pair is kept for in-flight calls and reuse detection.
+CREATE TABLE IF NOT EXISTS oauth_grants (
+    id                 TEXT PRIMARY KEY,
+    app_id             TEXT NOT NULL REFERENCES oauth_apps(client_id) ON DELETE CASCADE,
+    client_id          TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    access_hash        TEXT NOT NULL,
+    access_expires     REAL NOT NULL,
+    prev_access_hash   TEXT,
+    prev_access_expires REAL,
+    refresh_hash       TEXT NOT NULL,
+    refresh_expires    REAL NOT NULL,
+    prev_refresh_hash  TEXT,
+    created_at         REAL NOT NULL,
+    last_used_at       REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS oauth_grants_access ON oauth_grants(access_hash);
+CREATE INDEX IF NOT EXISTS oauth_grants_refresh ON oauth_grants(refresh_hash);
 CREATE TABLE IF NOT EXISTS link_flows (
     state       TEXT PRIMARY KEY,
     upstream_id TEXT NOT NULL REFERENCES upstreams(id) ON DELETE CASCADE,
@@ -70,7 +103,36 @@ CREATE TABLE IF NOT EXISTS link_flows (
 MIGRATIONS = [
     # (table, column, DDL) -- additive only, applied when the column is missing
     ("clients", "key_hash", "ALTER TABLE clients ADD COLUMN key_hash TEXT"),
+    # stdio upstreams: url is '' for them; command/args/env describe the local program.
+    (
+        "upstreams",
+        "transport",
+        "ALTER TABLE upstreams ADD COLUMN transport TEXT NOT NULL DEFAULT 'http'",
+    ),
+    ("upstreams", "command", "ALTER TABLE upstreams ADD COLUMN command TEXT NOT NULL DEFAULT ''"),
+    ("upstreams", "args", "ALTER TABLE upstreams ADD COLUMN args TEXT NOT NULL DEFAULT '[]'"),
+    ("upstreams", "env", "ALTER TABLE upstreams ADD COLUMN env TEXT NOT NULL DEFAULT '{}'"),
+    (
+        "upstreams",
+        "isolate_home",
+        "ALTER TABLE upstreams ADD COLUMN isolate_home INTEGER NOT NULL DEFAULT 0",
+    ),
 ]
+
+UPSTREAM_COLS = "id, name, url, transport, command, args, env, isolate_home"
+
+
+def _upstream(row: dict) -> Upstream:
+    return Upstream(
+        id=row["id"],
+        name=row["name"],
+        url=row["url"] or None,
+        transport=row["transport"],
+        command=row["command"],
+        args=json.loads(row["args"]),
+        env=json.loads(row["env"]),
+        isolate_home=bool(row["isolate_home"]),
+    )
 
 
 class NotFound(LookupError):
@@ -107,14 +169,27 @@ class Store:
 
     # -- upstreams -------------------------------------------------------------------------
     async def list_upstreams(self) -> list[Upstream]:
-        rows = await self.db.execute_fetchall("SELECT id, name, url FROM upstreams ORDER BY id")
-        return [Upstream(**dict(r)) for r in rows]
+        rows = await self.db.execute_fetchall(
+            f"SELECT {UPSTREAM_COLS} FROM upstreams ORDER BY id"  # noqa: S608
+        )
+        return [_upstream(dict(r)) for r in rows]
 
     async def put_upstream(self, u: Upstream) -> Upstream:
         await self.db.execute(
-            "INSERT INTO upstreams (id, name, url) VALUES (?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, url = excluded.url",
-            (u.id, u.name, str(u.url)),
+            f"INSERT INTO upstreams ({UPSTREAM_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "  # noqa: S608
+            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, url = excluded.url, "
+            "transport = excluded.transport, command = excluded.command, args = excluded.args, "
+            "env = excluded.env, isolate_home = excluded.isolate_home",
+            (
+                u.id,
+                u.name,
+                str(u.url) if u.url else "",
+                u.transport.value,
+                u.command,
+                json.dumps(u.args),
+                json.dumps(u.env),
+                int(u.isolate_home),
+            ),
         )
         await self.db.commit()
         return u
@@ -131,15 +206,13 @@ class Store:
 
     async def get_account(self, account_id: str) -> tuple[Account, Upstream]:
         rows = await self.db.execute_fetchall(
-            "SELECT a.id, a.upstream_id, a.alias, a.identity, a.enabled, "
-            "u.name AS u_name, u.url AS u_url "
-            "FROM accounts a JOIN upstreams u ON u.id = a.upstream_id WHERE a.id = ?",
+            "SELECT id, upstream_id, alias, identity, enabled FROM accounts WHERE id = ?",
             (account_id,),
         )
         if not rows:
             raise NotFound(account_id)
         r = dict(rows[0])
-        upstream = Upstream(id=r["upstream_id"], name=r.pop("u_name"), url=r.pop("u_url"))
+        upstream = await self.get_upstream(r["upstream_id"])
         return Account(**{**r, "enabled": bool(r["enabled"])}), upstream
 
     async def put_account(self, a: Account) -> Account:
@@ -291,11 +364,164 @@ class Store:
 
     async def get_upstream(self, upstream_id: str) -> Upstream:
         rows = await self.db.execute_fetchall(
-            "SELECT id, name, url FROM upstreams WHERE id = ?", (upstream_id,)
+            f"SELECT {UPSTREAM_COLS} FROM upstreams WHERE id = ?",  # noqa: S608
+            (upstream_id,),
         )
         if not rows:
             raise NotFound(upstream_id)
-        return Upstream(**dict(rows[0]))
+        return _upstream(dict(rows[0]))
+
+    # -- OAuth server for clients ---------------------------------------------------------------
+    async def put_oauth_app(self, client_id: str, name: str, uris: list[str], now: float) -> None:
+        await self.db.execute(
+            "INSERT INTO oauth_apps (client_id, name, redirect_uris, created_at) VALUES (?,?,?,?)",
+            (client_id, name, json.dumps(uris), now),
+        )
+        await self.db.commit()
+
+    async def get_oauth_app(self, client_id: str) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM oauth_apps WHERE client_id = ?", (client_id,)
+        )
+        if not rows:
+            return None
+        row = dict(rows[0])
+        row["redirect_uris"] = json.loads(row["redirect_uris"])
+        return row
+
+    async def count_oauth_apps(self) -> int:
+        rows = await self.db.execute_fetchall("SELECT COUNT(*) AS n FROM oauth_apps")
+        return int(rows[0]["n"])
+
+    async def prune_oauth_apps(self, created_before: float) -> None:
+        """Registrations that never led to an approved login, older than the cutoff."""
+        await self.db.execute(
+            "DELETE FROM oauth_apps WHERE created_at < ? AND client_id NOT IN "
+            "(SELECT app_id FROM oauth_grants)",
+            (created_before,),
+        )
+        await self.db.commit()
+
+    async def put_oauth_pending(self, request_id: str, data: dict, now: float, cutoff: float):
+        await self.db.execute("DELETE FROM oauth_transient WHERE expires_at < ?", (now,))
+        await self.db.execute(
+            "INSERT INTO oauth_transient (id, kind, data, expires_at) VALUES (?, 'pending', ?, ?)",
+            (request_id, json.dumps(data), now + (now - cutoff)),
+        )
+        await self.db.commit()
+
+    async def put_oauth_code(self, code_hash: str, data: dict, expires_at: float) -> None:
+        await self.db.execute(
+            "INSERT INTO oauth_transient (id, kind, data, expires_at) VALUES (?, 'code', ?, ?)",
+            (code_hash, json.dumps(data), expires_at),
+        )
+        await self.db.commit()
+
+    async def _pop_transient(self, row_id: str, kind: str, now: float) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT data, expires_at FROM oauth_transient WHERE id = ? AND kind = ?",
+            (row_id, kind),
+        )
+        await self.db.execute(
+            "DELETE FROM oauth_transient WHERE id = ? AND kind = ?", (row_id, kind)
+        )
+        await self.db.commit()
+        if not rows or rows[0]["expires_at"] < now:
+            return None
+        return json.loads(rows[0]["data"])
+
+    async def pop_oauth_pending(self, request_id: str, now: float) -> dict | None:
+        return await self._pop_transient(request_id, "pending", now)
+
+    async def pop_oauth_code(self, code_hash: str, now: float) -> dict | None:
+        return await self._pop_transient(code_hash, "code", now)
+
+    async def create_oauth_grant(
+        self,
+        grant_id: str,
+        *,
+        app_id: str,
+        client_id: str,
+        access_hash: str,
+        access_expires: float,
+        refresh_hash: str,
+        refresh_expires: float,
+        now: float,
+    ) -> None:
+        await self.db.execute(
+            "INSERT INTO oauth_grants (id, app_id, client_id, access_hash, access_expires, "
+            "refresh_hash, refresh_expires, created_at, last_used_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                grant_id,
+                app_id,
+                client_id,
+                access_hash,
+                access_expires,
+                refresh_hash,
+                refresh_expires,
+                now,
+                now,
+            ),
+        )
+        await self.db.commit()
+
+    async def rotate_oauth_grant(
+        self,
+        grant_id: str,
+        *,
+        access_hash: str,
+        access_expires: float,
+        refresh_hash: str,
+        refresh_expires: float,
+        now: float,
+    ) -> None:
+        await self.db.execute(
+            "UPDATE oauth_grants SET prev_access_hash = access_hash, "
+            "prev_access_expires = access_expires, prev_refresh_hash = refresh_hash, "
+            "access_hash = ?, access_expires = ?, refresh_hash = ?, refresh_expires = ?, "
+            "last_used_at = ? WHERE id = ?",
+            (access_hash, access_expires, refresh_hash, refresh_expires, now, grant_id),
+        )
+        await self.db.commit()
+
+    async def oauth_grant_by_access(self, access_hash: str, now: float) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM oauth_grants WHERE (access_hash = ? AND access_expires > ?) "
+            "OR (prev_access_hash = ? AND prev_access_expires > ?)",
+            (access_hash, now, access_hash, now),
+        )
+        return dict(rows[0]) if rows else None
+
+    async def oauth_grant_by_refresh(self, refresh_hash: str) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM oauth_grants WHERE refresh_hash = ?", (refresh_hash,)
+        )
+        return dict(rows[0]) if rows else None
+
+    async def oauth_grant_by_previous_refresh(self, refresh_hash: str) -> dict | None:
+        rows = await self.db.execute_fetchall(
+            "SELECT * FROM oauth_grants WHERE prev_refresh_hash = ?", (refresh_hash,)
+        )
+        return dict(rows[0]) if rows else None
+
+    async def delete_oauth_grant(self, grant_id: str) -> None:
+        await self.db.execute("DELETE FROM oauth_grants WHERE id = ?", (grant_id,))
+        await self.db.commit()
+
+    async def list_oauth_grants(self) -> list[dict]:
+        rows = await self.db.execute_fetchall(
+            "SELECT g.id, g.client_id, g.app_id, a.name AS app_name, a.redirect_uris, "
+            "g.created_at, g.last_used_at, g.refresh_expires "
+            "FROM oauth_grants g JOIN oauth_apps a ON a.client_id = g.app_id "
+            "ORDER BY g.created_at"
+        )
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["redirect_uris"] = json.loads(d["redirect_uris"])
+            out.append(d)
+        return out
 
     async def _delete(self, table: str, row_id: str) -> None:
         cur = await self.db.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))  # noqa: S608

@@ -25,7 +25,7 @@ from hydra_mcp.settings import Settings
 
 # A source checkout: <repo>/proxy/src/hydra_mcp/cli.py -> <repo>/admin/dist (after `make build`)
 CHECKOUT_ADMIN_DIST = Path(__file__).resolve().parents[3] / "admin" / "dist"
-COMMANDS = {"serve", "demo", "admin-token"}
+COMMANDS = {"serve", "demo", "admin-token", "bridge"}
 
 
 def packaged_admin_dist() -> Path | None:
@@ -73,7 +73,20 @@ def main(argv: list[str] | None = None) -> None:
     demo.add_argument("--no-open", action="store_true", help="do not open a browser")
     sub.add_parser("admin-token", help="print the admin token for the admin page")
 
+    bridge = sub.add_parser(
+        "bridge",
+        help="stdio MCP server relaying to a running hydra-mcp (for Claude Desktop)",
+        description="Reads the client key from HYDRA_MCP_KEY. Logs go to stderr; stdout is "
+        "the MCP channel.",
+    )
+    bridge.add_argument("--url", help="hydra-mcp /mcp URL (default http://127.0.0.1:8765/mcp)")
+
     args = parser.parse_args(argv)
+    if args.cmd == "bridge":
+        # Before Settings(): the bridge must not read the proxy's .env or touch its data dir.
+        from hydra_mcp.bridge import main as bridge_main
+
+        raise SystemExit(bridge_main(args.url, None))
     settings = Settings()
 
     if args.cmd == "admin-token":
@@ -100,6 +113,10 @@ def main(argv: list[str] | None = None) -> None:
     print(f"hydra-mcp {__version__}")
     print(f"  MCP endpoint  {settings.base_url}/mcp")
     _print_admin(settings, admin_url)
+    if settings.external_base_url:
+        print(
+            f"  external      {settings.external_base_url}/mcp  (apps on the internet: OAuth login)"
+        )
     if args.open and settings.admin_dist:
         _open_later(admin_url)
     if args.reload:

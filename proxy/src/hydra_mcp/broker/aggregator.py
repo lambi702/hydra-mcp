@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 
 from hydra_mcp.broker.oauth import NotLinked, OAuthBroker, OAuthError
+from hydra_mcp.broker.stdio import StdioPool
 from hydra_mcp.broker.upstream import UpstreamAuthError, UpstreamClient, UpstreamError
 from hydra_mcp.models import Account, Client, Upstream
 from hydra_mcp.store import Store
@@ -52,20 +53,34 @@ def _account_param(schema: dict) -> str:
 
 
 class Aggregator:
-    def __init__(self, store: Store, oauth: OAuthBroker, upstream: UpstreamClient):
+    def __init__(
+        self,
+        store: Store,
+        oauth: OAuthBroker,
+        upstream: UpstreamClient,
+        stdio: StdioPool | None = None,
+    ):
         self.store = store
         self.oauth = oauth
         self.upstream = upstream
+        self.stdio = stdio
         self._tools_cache: dict[str, tuple[float, list[dict]]] = {}
 
-    def invalidate(self, account_id: str | None = None) -> None:
+    async def invalidate(self, account_id: str | None = None) -> None:
         if account_id is None:
             self._tools_cache.clear()
         else:
             self._tools_cache.pop(account_id, None)
             self.upstream.forget(account_id)
+            if self.stdio is not None:
+                await self.stdio.forget(account_id)
 
     async def _call(self, account: Account, upstream: Upstream, method: str, params: dict | None):
+        if upstream.is_stdio:
+            if self.stdio is None:
+                raise UpstreamError("local (stdio) servers are disabled on this proxy")
+            env = await self.oauth.stdio_env(account)
+            return await self.stdio.request(account.id, upstream, env, method, params)
         token = await self.oauth.access_token(account, upstream)
         try:
             return await self.upstream.request(account.id, str(upstream.url), token, method, params)

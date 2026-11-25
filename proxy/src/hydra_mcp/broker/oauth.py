@@ -29,7 +29,7 @@ from urllib.parse import urlencode
 import httpx
 
 from hydra_mcp import __version__
-from hydra_mcp.broker.setup import catalog_entry
+from hydra_mcp.broker.setup import callback_for, catalog_entry
 from hydra_mcp.models import Account, Upstream
 from hydra_mcp.router.discovery import DiscoveryError, PrmCache, fetch_as_metadata
 from hydra_mcp.store import Store
@@ -114,7 +114,33 @@ def _identity(tokens: dict) -> str:
         if claims.get("email") or claims.get("sub"):
             return str(claims.get("email") or claims.get("sub"))
     claims = _jwt_claims(tokens.get("access_token", ""))
-    return str(claims.get("email") or "")
+    if claims.get("email"):
+        return str(claims["email"])
+    # Slack: the token response names the workspace the user token was granted on.
+    team = tokens.get("team")
+    if isinstance(team, dict) and team.get("name"):
+        return str(team["name"])
+    return ""
+
+
+def normalize_token_response(data: dict) -> dict:
+    """Bring provider-specific token responses to the RFC 6749 shape.
+
+    Slack answers HTTP 200 with {"ok": false, "error": "..."} on failure, and its classic
+    oauth.v2.access puts the user token under "authed_user". Both are mapped here so the rest
+    of the broker only sees `access_token`, `refresh_token`, `expires_in`.
+    """
+    if data.get("ok") is False:
+        raise OAuthError(f"token endpoint refused: {data.get('error') or 'unknown error'}")
+    if "access_token" not in data and isinstance(data.get("authed_user"), dict):
+        user = data["authed_user"]
+        lifted = {
+            k: user[k]
+            for k in ("access_token", "refresh_token", "expires_in", "scope")
+            if k in user
+        }
+        data = {**data, **lifted}
+    return data
 
 
 def suggest_alias(identity: str, n: int) -> str:
@@ -166,6 +192,9 @@ class OAuthBroker:
     def redirect_uri(self) -> str:
         return f"{self.base_url}/oauth/callback"
 
+    def redirect_uri_for(self, upstream: Upstream) -> str:
+        return callback_for(upstream, self.redirect_uri)
+
     # -- discovery and registration ------------------------------------------------------------
     async def discover(self, upstream: Upstream) -> Discovered:
         try:
@@ -207,11 +236,12 @@ class OAuthBroker:
             raise NeedsManualClient(
                 f"{upstream.name}: the authorization server ({d.issuer}) does not allow "
                 "automatic registration. Create an OAuth client at the provider with redirect URI "
-                f"{self.redirect_uri}, then enter its client ID and secret on the upstream."
+                f"{self.redirect_uri_for(upstream)}, then enter its client ID and secret on the "
+                "upstream."
             )
         body = {
             "client_name": f"hydra-mcp ({upstream.name})",
-            "redirect_uris": [self.redirect_uri],
+            "redirect_uris": [self.redirect_uri_for(upstream)],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
@@ -272,7 +302,7 @@ class OAuthBroker:
         params = {
             "response_type": "code",
             "client_id": client["client_id"],
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": self.redirect_uri_for(upstream),
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
@@ -280,7 +310,8 @@ class OAuthBroker:
             **ISSUER_QUIRKS.get(d.issuer.rstrip("/"), {}),
         }
         if d.scopes:
-            params["scope"] = " ".join(d.scopes)
+            entry = catalog_entry(upstream)
+            params["scope"] = (entry.scope_separator if entry else " ").join(d.scopes)
         return f"{d.meta['authorization_endpoint']}?{urlencode(params)}"
 
     async def finish_link(self, state: str, code: str) -> LinkResult:
@@ -297,7 +328,7 @@ class OAuthBroker:
             {
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": self.redirect_uri,
+                "redirect_uri": self.redirect_uri_for(upstream),
                 "code_verifier": row["verifier"],
                 "resource": d.resource,
             },
@@ -338,16 +369,58 @@ class OAuthBroker:
             await self.store.put_account(account)
         return LinkResult(account=account, created=created)
 
-    async def _account_for(self, upstream: Upstream, identity: str) -> tuple[Account, bool]:
+    async def link_stdio(
+        self,
+        upstream: Upstream,
+        env: dict[str, str],
+        *,
+        alias: str = "",
+        identity: str = "",
+        account_id: str | None = None,
+    ) -> LinkResult:
+        """Store the secret environment of a local (stdio) account, encrypted like a token.
+
+        A stdio account is "connected" when this row exists, exactly like an HTTP account with a
+        token: the rest of the proxy (grants, status, aggregation) does not need to know the
+        difference.
+        """
+        created = False
+        if account_id:
+            account, _ = await self.store.get_account(account_id)
+        else:
+            existing = [a for a in await self.store.list_accounts() if a.upstream_id == upstream.id]
+            wanted = re.sub(r"[^a-z0-9-]+", "-", alias.lower()).strip("-")[:32]
+            if wanted and any(a.alias == wanted for a in existing):
+                raise OAuthError(f"{upstream.name} already has an account named '{wanted}'")
+            account, created = await self._account_for(upstream, identity, alias=wanted)
+        await self._save(account.id, {"access_token": "", "kind": "stdio", "env": env}, None)
+        if identity and identity != account.identity:
+            account = account.model_copy(update={"identity": identity})
+            await self.store.put_account(account)
+        return LinkResult(account=account, created=created)
+
+    async def stdio_env(self, account: Account) -> dict[str, str]:
+        row = await self.store.get_token_row(account.id)
+        if row is None:
+            raise NotLinked(f"account '{account.id}' is not connected")
+        try:
+            bundle = self.vault.open(row["blob"], aad=f"token:{account.id}")
+        except VaultError as exc:
+            raise NotLinked(f"account '{account.id}': stored settings unreadable") from exc
+        return dict(bundle.get("env") or {})
+
+    async def _account_for(
+        self, upstream: Upstream, identity: str, alias: str = ""
+    ) -> tuple[Account, bool]:
         """The account a new login belongs to: the same identity again, or a new account."""
         existing = [a for a in await self.store.list_accounts() if a.upstream_id == upstream.id]
-        if identity:
+        if identity and not alias:
             same = next((a for a in existing if a.identity == identity), None)
             if same is not None:
                 return same, False
         aliases = {a.alias for a in existing}
         ids = {a.id for a in await self.store.list_accounts()}
-        alias = _unique(suggest_alias(identity, len(existing) + 1), aliases)
+        alias = _unique(alias or suggest_alias(identity, len(existing) + 1), aliases)
         account_id = _unique(f"{upstream.id}-{alias}"[:28].rstrip("-"), ids)
         account = Account(id=account_id, upstream_id=upstream.id, alias=alias, identity=identity)
         await self.store.put_account(account)
@@ -408,7 +481,10 @@ class OAuthBroker:
             raise OAuthError(
                 f"{upstream.name}: token endpoint answered {resp.status_code}: {resp.text[:300]}"
             )
-        data = resp.json()
+        try:
+            data = normalize_token_response(resp.json())
+        except OAuthError as exc:
+            raise OAuthError(f"{upstream.name}: {exc}") from exc
         if "access_token" not in data:
             raise OAuthError(f"{upstream.name}: token response without access_token")
         return data
@@ -424,6 +500,8 @@ class OAuthBroker:
             "identity": (previous or {}).get("identity", ""),
             "kind": tokens.get("kind", "oauth"),
         }
+        if "env" in tokens:
+            bundle["env"] = tokens["env"]
         bundle["identity"] = _identity(tokens) or bundle["identity"]
         await self.store.put_token_row(
             account_id,

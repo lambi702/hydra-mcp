@@ -2,7 +2,7 @@
 
 This walks through a first setup: install, connect two accounts of the same service, give an AI
 app access, and use it. Count about ten minutes, more if a service needs a one-time OAuth app
-(Google, GitHub, Asana).
+(Google, GitHub, Slack, Asana).
 
 ## 0. Try the demo (optional, one minute)
 
@@ -72,10 +72,11 @@ Then click **Sign in**. Depending on the service:
 
 - **One click** (Atlassian, Linear, Notion, Sentry, Stripe, Cloudflare, Supabase): hydra-mcp
   registers itself at the service and sends you to its login page.
-- **One-time OAuth app** (Google, GitHub, Asana): these services do not let apps register
+- **One-time OAuth app** (Google, GitHub, Slack, Asana): these services do not let apps register
   themselves. A wizard lists the steps with direct links and the exact values to paste,
   including the callback URL `http://127.0.0.1:8765/oauth/callback`. You do this once per
-  service; every later account is one click.
+  service; every later account is one click. Slack is the exception: one small Slack app per
+  workspace (**+ Another workspace** on its card), and its callback uses `localhost`.
 - **Token** (GitHub, Linear, Stripe, Cloudflare, Supabase, Notion Business): click *Use a token
   instead*, create a personal token with the link given, paste it. hydra-mcp tries it against
   the service before saving it.
@@ -148,8 +149,13 @@ Add `--scope user` to have it in every project.
 **Any other app**: Streamable HTTP at `http://127.0.0.1:8765/mcp` with the header
 `Authorization: Bearer hmcp_…`.
 
-> Claude Desktop and claude.ai connect from Anthropic's servers, so they cannot reach
-> `127.0.0.1`. They need a public HTTPS URL, which hydra-mcp does not provide yet.
+**Claude Desktop**: the *Claude Desktop* tab gives a block for `claude_desktop_config.json`
+that starts `hydra-mcp bridge`, a small local relay. No tunnel. See
+[Claude Desktop](clients/claude-desktop.md).
+
+**claude.ai** (and Claude mobile) connects from Anthropic's servers, so it needs hydra-mcp on a
+public HTTPS address (a tunnel), and signs in with OAuth instead of a key. See
+[claude.ai](clients/claude-ai.md).
 
 ## 5. Use it
 

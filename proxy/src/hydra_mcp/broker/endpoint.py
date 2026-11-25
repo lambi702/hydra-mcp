@@ -1,8 +1,10 @@
 """The aggregated MCP endpoint `/mcp` that clients connect to in broker mode.
 
-Client authentication, version 1: a per-client key sent as `Authorization: Bearer hmcp_...`,
-created in the admin page (only its SHA-256 is stored). The planned replacement is the proxy
-acting as an OAuth AS toward clients (one login per client, profile chosen on consent).
+Client authentication, two ways, both ending in one hydra-mcp client and its grants:
+- a per-client key `Authorization: Bearer hmcp_...` created in the admin page (only its
+  SHA-256 is stored), for apps that accept a header: Claude Code, Cursor, VS Code;
+- an OAuth access token `hmcp_at_...` issued by the proxy's own authorization server
+  (clientauth.py), for apps that only do the MCP OAuth flow: claude.ai, Claude Desktop.
 
 Responses are plain JSON (`application/json`), which Streamable HTTP allows; the endpoint keeps
 no session, so any request can be served on its own.
@@ -19,6 +21,7 @@ from starlette.responses import JSONResponse, Response
 
 from hydra_mcp import __version__
 from hydra_mcp.broker.aggregator import Aggregator
+from hydra_mcp.clientauth import ClientAuth
 from hydra_mcp.store import Store
 
 log = logging.getLogger(__name__)
@@ -43,30 +46,41 @@ def _rpc_error(msg_id, code: int, message: str, status: int = 200) -> JSONRespon
 
 
 class BrokerEndpoint:
-    def __init__(self, store: Store, aggregator: Aggregator):
+    def __init__(self, store: Store, aggregator: Aggregator, auth: ClientAuth):
         self.store = store
         self.aggregator = aggregator
+        self.auth = auth
+        external = auth.origins.external
+        self._allowed_origin_hosts = {"127.0.0.1", "localhost", "::1"}
+        if external:
+            self._allowed_origin_hosts.add(urlsplit(external).hostname or "")
 
     async def handle(self, request: Request) -> Response:
-        # DNS-rebinding guard: browsers send Origin; only accept loopback origins.
+        # DNS-rebinding guard: browsers send Origin; only accept loopback origins (and the
+        # external URL's own origin). Server-side clients (claude.ai) send no Origin.
         origin = request.headers.get("origin")
-        if origin and urlsplit(origin).hostname not in ("127.0.0.1", "localhost", "::1"):
+        if origin and urlsplit(origin).hostname not in self._allowed_origin_hosts:
             return JSONResponse({"error": "origin not allowed"}, 403)
         if request.method != "POST":
             return Response(status_code=405, headers={"Allow": "POST"})
 
         auth = request.headers.get("authorization", "")
         key = auth.removeprefix("Bearer ").strip()
-        client = (
-            await self.store.client_by_key_hash(hash_key(key))
-            if key.startswith(KEY_PREFIX)
-            else None
-        )
+        if key.startswith(KEY_PREFIX) and not key.startswith(("hmcp_at_", "hmcp_rt_")):
+            client = await self.store.client_by_key_hash(hash_key(key))
+        else:
+            client = await self.auth.client_for_access_token(key)
         if client is None:
+            # MCP authorization spec: 401 + a pointer to the protected resource metadata, from
+            # which OAuth-capable apps discover the proxy's authorization server.
             return JSONResponse(
-                {"error": "missing or unknown client key; create one in the hydra-mcp admin page"},
+                {
+                    "error": "invalid_token",
+                    "error_description": "missing or unknown client key or access token; "
+                    "create a key in the hydra-mcp admin page, or sign in with OAuth",
+                },
                 401,
-                headers={"WWW-Authenticate": 'Bearer realm="hydra-mcp"'},
+                headers={"WWW-Authenticate": self.auth.challenge(request)},
             )
 
         try:

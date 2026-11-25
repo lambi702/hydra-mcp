@@ -8,6 +8,25 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ### Added
 
+- Local (stdio) servers: hydra-mcp starts a program (`npx …`, `uvx …`) once per account, each
+  copy with its own encrypted secret settings and optionally its own home folder. Started on
+  first use, stopped when idle, restarted after a crash with the program's last output in the
+  error. `HYDRA_MCP_STDIO_ENABLED`, `HYDRA_MCP_STDIO_IDLE_S`.
+- Slack connector (official server at `mcp.slack.com`): app manifest with the callback and user
+  scopes, PKCE so a local `http://localhost` callback works, one Slack app per workspace with
+  **+ Another workspace**, accounts named after the workspace.
+- Provider quirks as connector data: `redirect_host`, `scope_separator`,
+  `one_client_per_workspace`. Token responses in Slack's shape (`ok`, `authed_user`) are
+  normalized.
+- claude.ai and Claude Desktop custom connectors: hydra-mcp is now also an OAuth server for apps
+  (protected resource and server metadata, dynamic registration, consent page bound to a
+  hydra-mcp client, PKCE, rotating refresh tokens with reuse detection, revocation). Apps
+  signed in this way show on their client card and can be signed out.
+- `HYDRA_MCP_EXTERNAL_URL` for a tunnel: only `/mcp` and the app login are served under it; the
+  admin page and API stay local-only.
+- `hydra-mcp bridge`: a stdio relay for Claude Desktop's config file, no tunnel needed. The
+  admin page's setup now has *Claude Desktop* and *claude.ai* tabs.
+- Guides: `docs/clients/claude-desktop.md`, `docs/clients/claude-ai.md`.
 - One-line install: `uvx hydra-mcp` or `pipx install hydra-mcp`. The wheel ships the admin page,
   so Node is no longer needed to run hydra-mcp.
 - `hydra-mcp demo`: a fake provider (Demo Tracker) served by the proxy, with two accounts already
@@ -20,6 +39,10 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ### Changed
 
+- Gmail, GitHub, Notion and Linear guides re-checked against vendor docs (2026-11-25): Gmail
+  client type and tools, GitHub toolset URLs, Notion SSE retirement and limits, Linear
+  read-only URL.
+- After a provider login, the browser returns to the absolute public URL of the admin page.
 - The public URL follows `--port`/`HYDRA_MCP_PORT` unless `HYDRA_MCP_PUBLIC_URL` is set, so
   changing the port no longer breaks OAuth callbacks.
 

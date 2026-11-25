@@ -117,7 +117,7 @@ async def test_browser_login_adds_a_third_account(demo):
 
     done = await client.get(callback)
     assert done.status_code == 303
-    assert done.headers["location"] == "/admin/?connected=demo-initech&new=1"
+    assert done.headers["location"] == f"{BASE}/admin/?connected=demo-initech&new=1"
 
 
 async def test_cancel_on_login_page_returns_access_denied(demo):
