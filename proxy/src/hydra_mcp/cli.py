@@ -9,7 +9,9 @@ hydra-mcp admin-token     print the admin token
 from __future__ import annotations
 
 import argparse
+import errno
 import logging
+import socket
 import sys
 import tempfile
 import threading
@@ -47,6 +49,24 @@ def find_admin_dist(settings: Settings) -> Path | None:
 def _browser_host(host: str) -> str:
     """The host to put in links: a wildcard bind is reached through loopback."""
     return "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+
+
+def _check_port(host: str, port: int) -> None:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    try:
+        with socket.socket(family) as probe:
+            if sys.platform != "win32":
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind((host, port))
+    except OSError as error:
+        if error.errno not in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)):
+            return  # Let Uvicorn report other bind errors as usual.
+        print(
+            f"hydra-mcp: port {port} is already in use. "
+            "Stop the other process or choose another port with --port or HYDRA_MCP_PORT.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -109,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
         _run_demo(settings, open_browser=not args.no_open)
         return
 
+    _check_port(settings.host, settings.port)
     admin_url = f"{settings.base_url}/admin/#token={settings.resolved_admin_token}"
     print(f"hydra-mcp {__version__}")
     print(f"  MCP endpoint  {settings.base_url}/mcp")
