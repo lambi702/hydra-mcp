@@ -106,7 +106,9 @@ def create_app(
         await aggregator.invalidate(result.account.id)
         # Back to the admin page, which asks for a friendly name when the account is new.
         query = urlencode({"connected": result.account.id, "new": int(result.created)})
-        return RedirectResponse(f"/admin/?{query}", status_code=303)
+        # Absolute: the callback may have arrived on another host name (localhost for Slack)
+        # than the one the admin page is logged in on.
+        return RedirectResponse(f"{settings.base_url}/admin/?{query}", status_code=303)
 
     routes: list[Route | Mount] = [
         Route("/healthz", health, methods=["GET"]),

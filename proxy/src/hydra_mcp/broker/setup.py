@@ -11,7 +11,7 @@ one before any discovery has run.
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from hydra_mcp.catalog import Connector, load_catalog
 from hydra_mcp.models import Upstream
@@ -35,6 +35,24 @@ def catalog_entry(upstream: Upstream) -> Connector | None:
     """The library entry for this upstream's URL, if it was installed from (or matches) one."""
     url = str(upstream.url).rstrip("/")
     return next((c for c in load_catalog().connectors if str(c.url).rstrip("/") == url), None)
+
+
+def callback_for(upstream: Upstream, redirect_uri: str) -> str:
+    """The callback to register at this upstream's AS.
+
+    Usually the proxy's `<public URL>/oauth/callback`. A provider that only accepts plain-http
+    callbacks on `localhost` (Slack) gets the same URL with `localhost` instead of 127.0.0.1:
+    both reach this proxy, and the callback then sends the browser back to the public URL,
+    where the admin page is logged in.
+    """
+    entry = catalog_entry(upstream)
+    parts = urlsplit(redirect_uri)
+    if not (entry and entry.redirect_host and parts.scheme == "http"):
+        return redirect_uri
+    if parts.hostname not in ("127.0.0.1", "::1"):
+        return redirect_uri
+    netloc = entry.redirect_host + (f":{parts.port}" if parts.port else "")
+    return urlunsplit(parts._replace(netloc=netloc))
 
 
 def is_google(upstream: Upstream) -> bool:

@@ -29,7 +29,7 @@ from urllib.parse import urlencode
 import httpx
 
 from hydra_mcp import __version__
-from hydra_mcp.broker.setup import catalog_entry
+from hydra_mcp.broker.setup import callback_for, catalog_entry
 from hydra_mcp.models import Account, Upstream
 from hydra_mcp.router.discovery import DiscoveryError, PrmCache, fetch_as_metadata
 from hydra_mcp.store import Store
@@ -114,7 +114,33 @@ def _identity(tokens: dict) -> str:
         if claims.get("email") or claims.get("sub"):
             return str(claims.get("email") or claims.get("sub"))
     claims = _jwt_claims(tokens.get("access_token", ""))
-    return str(claims.get("email") or "")
+    if claims.get("email"):
+        return str(claims["email"])
+    # Slack: the token response names the workspace the user token was granted on.
+    team = tokens.get("team")
+    if isinstance(team, dict) and team.get("name"):
+        return str(team["name"])
+    return ""
+
+
+def normalize_token_response(data: dict) -> dict:
+    """Bring provider-specific token responses to the RFC 6749 shape.
+
+    Slack answers HTTP 200 with {"ok": false, "error": "..."} on failure, and its classic
+    oauth.v2.access puts the user token under "authed_user". Both are mapped here so the rest
+    of the broker only sees `access_token`, `refresh_token`, `expires_in`.
+    """
+    if data.get("ok") is False:
+        raise OAuthError(f"token endpoint refused: {data.get('error') or 'unknown error'}")
+    if "access_token" not in data and isinstance(data.get("authed_user"), dict):
+        user = data["authed_user"]
+        lifted = {
+            k: user[k]
+            for k in ("access_token", "refresh_token", "expires_in", "scope")
+            if k in user
+        }
+        data = {**data, **lifted}
+    return data
 
 
 def suggest_alias(identity: str, n: int) -> str:
@@ -166,6 +192,9 @@ class OAuthBroker:
     def redirect_uri(self) -> str:
         return f"{self.base_url}/oauth/callback"
 
+    def redirect_uri_for(self, upstream: Upstream) -> str:
+        return callback_for(upstream, self.redirect_uri)
+
     # -- discovery and registration ------------------------------------------------------------
     async def discover(self, upstream: Upstream) -> Discovered:
         try:
@@ -207,11 +236,12 @@ class OAuthBroker:
             raise NeedsManualClient(
                 f"{upstream.name}: the authorization server ({d.issuer}) does not allow "
                 "automatic registration. Create an OAuth client at the provider with redirect URI "
-                f"{self.redirect_uri}, then enter its client ID and secret on the upstream."
+                f"{self.redirect_uri_for(upstream)}, then enter its client ID and secret on the "
+                "upstream."
             )
         body = {
             "client_name": f"hydra-mcp ({upstream.name})",
-            "redirect_uris": [self.redirect_uri],
+            "redirect_uris": [self.redirect_uri_for(upstream)],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
@@ -272,7 +302,7 @@ class OAuthBroker:
         params = {
             "response_type": "code",
             "client_id": client["client_id"],
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": self.redirect_uri_for(upstream),
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
@@ -280,7 +310,8 @@ class OAuthBroker:
             **ISSUER_QUIRKS.get(d.issuer.rstrip("/"), {}),
         }
         if d.scopes:
-            params["scope"] = " ".join(d.scopes)
+            entry = catalog_entry(upstream)
+            params["scope"] = (entry.scope_separator if entry else " ").join(d.scopes)
         return f"{d.meta['authorization_endpoint']}?{urlencode(params)}"
 
     async def finish_link(self, state: str, code: str) -> LinkResult:
@@ -297,7 +328,7 @@ class OAuthBroker:
             {
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": self.redirect_uri,
+                "redirect_uri": self.redirect_uri_for(upstream),
                 "code_verifier": row["verifier"],
                 "resource": d.resource,
             },
@@ -450,7 +481,10 @@ class OAuthBroker:
             raise OAuthError(
                 f"{upstream.name}: token endpoint answered {resp.status_code}: {resp.text[:300]}"
             )
-        data = resp.json()
+        try:
+            data = normalize_token_response(resp.json())
+        except OAuthError as exc:
+            raise OAuthError(f"{upstream.name}: {exc}") from exc
         if "access_token" not in data:
             raise OAuthError(f"{upstream.name}: token response without access_token")
         return data

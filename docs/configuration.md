@@ -25,7 +25,7 @@ admin-token` (prints the admin token).
 HYDRA_MCP_PORT=9000 HYDRA_MCP_PUBLIC_URL=http://127.0.0.1:9000 uv run hydra-mcp serve
 ```
 
-Then update the callback URL in the OAuth apps you created by hand (Google, GitHub, Asana) and the
+Then update the callback URL in the OAuth apps you created by hand (Google, GitHub, Slack, Asana) and the
 URL in your apps' MCP config.
 
 ## The data directory

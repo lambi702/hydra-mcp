@@ -166,14 +166,15 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
                 "error": str(exc),
                 "needs_manual_client": True,
                 "upstream_id": upstream.id,
-                "guide": setup_guide(upstream, oauth.redirect_uri),
+                "guide": setup_guide(upstream, oauth.redirect_uri_for(upstream)),
             },
             409,
         )
 
     async def _resolve_upstream(body: dict) -> Upstream | JSONResponse:
         """{"upstream_id"} | {"connector_id"} | {"name", "url"} -> the upstream, found or created
-        (by URL, so the same server is never added twice)."""
+        (by URL, so the same server is never added twice, unless {"new_upstream": true} asks
+        for a second row with its own OAuth client)."""
         if body.get("upstream_id"):
             return await store.get_upstream(body["upstream_id"])
         upstreams = await store.list_upstreams()
@@ -187,7 +188,14 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             if not name or not url:
                 return JSONResponse({"error": "name and url are required"}, 422)
             base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:24] or "server"
-        same = next((u for u in upstreams if str(u.url).rstrip("/") == url.rstrip("/")), None)
+        same_url = [u for u in upstreams if str(u.url).rstrip("/") == url.rstrip("/")]
+        if body.get("new_upstream"):
+            # e.g. another Slack workspace, with its own OAuth client. A row of this URL that
+            # has no account yet is a previous attempt (login cancelled): reuse it.
+            used = {a.upstream_id for a in await store.list_accounts()}
+            same = next((u for u in same_url if u.id not in used), None)
+        else:
+            same = same_url[0] if same_url else None
         if same is None:
             taken = {u.id for u in upstreams}
             uid, i = base, 2
@@ -370,10 +378,14 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
             await store.delete_upstream_oauth(upstream_id)
             return Response(status_code=204)
         row = await store.get_upstream_oauth(upstream_id)
-        guide = setup_guide(upstream, oauth.redirect_uri)
+        guide = setup_guide(upstream, oauth.redirect_uri_for(upstream))
         if row is None:
             return JSONResponse(
-                {"registered": False, "redirect_uri": oauth.redirect_uri, "guide": guide}
+                {
+                    "registered": False,
+                    "redirect_uri": oauth.redirect_uri_for(upstream),
+                    "guide": guide,
+                }
             )
         return JSONResponse(
             {
@@ -382,7 +394,7 @@ def build_admin_routes(services: Services, admin_token: str) -> list[Route]:
                 "issuer": row["issuer"],
                 "client_id": row["client_id"],
                 "has_secret": row["secret_enc"] is not None,
-                "redirect_uri": oauth.redirect_uri,
+                "redirect_uri": oauth.redirect_uri_for(upstream),
                 "guide": guide,
             }
         )
