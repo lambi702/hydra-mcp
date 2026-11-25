@@ -37,7 +37,7 @@ Google's official Gmail MCP server. Each Google account (personal Gmail or Works
 
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Gmail or Google accounts connect in one click.
-- If Google answers that the API is not available for your account, enroll it in the Google Workspace Developer Preview Program (link below): Google has run the Workspace MCP servers as a preview.
+- Enrollment of your Google Cloud project in the Google Workspace Developer Preview Program (link below). Google reviews requests by hand, so ask a few days ahead. Without it, login and the tool list work but every tool call fails with 'Access to this tool requires that your Google Cloud project (…) is enrolled in the Google Workspace Developer Preview Program'. A project inside a company organization may need a Workspace admin to enroll it.
 
 **Several accounts**
 
@@ -84,7 +84,7 @@ Google's official Drive MCP server. Each Google account (personal Gmail or Works
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Drive or Google accounts connect in one click.
 
@@ -130,7 +130,7 @@ Google's official Calendar MCP server. Each Google account (personal Gmail or Wo
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Calendar or Google accounts connect in one click.
 
@@ -176,7 +176,7 @@ Google's official Docs MCP server. Each Google account (personal Gmail or Worksp
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Docs or Google accounts connect in one click.
 
@@ -222,7 +222,7 @@ Google's official Sheets MCP server. Each Google account (personal Gmail or Work
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Sheets or Google accounts connect in one click.
 
@@ -268,7 +268,7 @@ Google's official Slides MCP server. Each Google account (personal Gmail or Work
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Slides or Google accounts connect in one click.
 
@@ -314,7 +314,7 @@ Google's official Chat MCP server. Each Google account (personal Gmail or Worksp
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Chat or Google accounts connect in one click.
 
@@ -361,7 +361,7 @@ Google's official Workspace search MCP server. Each Google account (personal Gma
 
 **Before you start**
 
-- Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.
+- Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.
 - A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.
 - About 10 minutes the first time, to create that OAuth client. The next Workspace search or Google accounts connect in one click.
 

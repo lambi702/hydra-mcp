@@ -8,6 +8,9 @@ All notable changes to hydra-mcp are listed here. The format follows
 
 ### Fixed
 
+- Google connectors: the guides now list enrollment of the Google Cloud project in the Workspace
+  Developer Preview as a required step (found testing Gmail with a real account: login works,
+  every tool call is refused until the project is enrolled).
 - The Claude Code setup command now uses `--scope user`: without it, Claude Code only saw hydra
   in the folder where the command was run.
 

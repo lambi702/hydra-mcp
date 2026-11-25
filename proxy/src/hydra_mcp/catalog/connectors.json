@@ -14,14 +14,14 @@
         "https://www.googleapis.com/auth/gmail.compose",
         "https://www.googleapis.com/auth/gmail.modify"
       ],
-      "notes": "Create your own Google Cloud OAuth client (type Web application, with 'Use this client for an AI-powered agent' ticked) and enable gmail.googleapis.com + gmailmcp.googleapis.com. Drafts only: the server cannot send.",
+      "notes": "Create your own Google Cloud OAuth client (type Web application, with 'Use this client for an AI-powered agent' ticked) and enable gmail.googleapis.com + gmailmcp.googleapis.com. The project must be enrolled in the Workspace Developer Preview. Drafts only: the server cannot send.",
       "docs": "https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server",
       "guide": {
         "summary": "Google's official Gmail MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Gmail or Google accounts connect in one click.",
-          "If Google answers that the API is not available for your account, enroll it in the Google Workspace Developer Preview Program (link below): Google has run the Workspace MCP servers as a preview."
+          "Enrollment of your Google Cloud project in the Google Workspace Developer Preview Program (link below). Google reviews requests by hand, so ask a few days ahead. Without it, login and the tool list work but every tool call fails with 'Access to this tool requires that your Google Cloud project (…) is enrolled in the Google Workspace Developer Preview Program'. A project inside a company organization may need a Workspace admin to enroll it."
         ],
         "accounts": "Add as many Google accounts as you like. In Testing mode, each address must first be added as a test user on the consent screen.",
         "gotchas": [
@@ -71,7 +71,7 @@
       "guide": {
         "summary": "Google's official Drive MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Drive or Google accounts connect in one click."
         ],
@@ -119,7 +119,7 @@
       "guide": {
         "summary": "Google's official Calendar MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Calendar or Google accounts connect in one click."
         ],
@@ -167,7 +167,7 @@
       "guide": {
         "summary": "Google's official Docs MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Docs or Google accounts connect in one click."
         ],
@@ -215,7 +215,7 @@
       "guide": {
         "summary": "Google's official Sheets MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Sheets or Google accounts connect in one click."
         ],
@@ -263,7 +263,7 @@
       "guide": {
         "summary": "Google's official Slides MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Slides or Google accounts connect in one click."
         ],
@@ -313,7 +313,7 @@
       "guide": {
         "summary": "Google's official Chat MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Chat or Google accounts connect in one click."
         ],
@@ -364,7 +364,7 @@
       "guide": {
         "summary": "Google's official Workspace search MCP server. Each Google account (personal Gmail or Workspace) becomes one hydra-mcp account.",
         "before": [
-          "Your Google account must be enrolled in the Google Workspace Developer Preview Program: the Workspace MCP servers are not public yet.",
+          "Your Google Cloud project must be enrolled in the Google Workspace Developer Preview Program (link below; Google reviews requests by hand, so ask a few days ahead): the Workspace MCP servers are not public yet. Without it, login works but every tool call is refused.",
           "A Google Cloud project (free). One project and one OAuth client serve every Google connector and every Google account.",
           "About 10 minutes the first time, to create that OAuth client. The next Workspace search or Google accounts connect in one click."
         ],
