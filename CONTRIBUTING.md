@@ -34,6 +34,46 @@ Use a separate data directory while developing, so you never touch your real acc
 export HYDRA_MCP_DATA_DIR=/tmp/hydra-dev HYDRA_MCP_ADMIN_TOKEN=dev
 ```
 
+### On Windows (PowerShell)
+
+From the repository root, install with `uv sync --directory proxy` and
+`npm.cmd --prefix admin ci`. To run both development servers, open two
+PowerShell terminals in that root. In the first, run:
+
+```powershell
+$env:HYDRA_MCP_DATA_DIR = Join-Path $env:TEMP "hydra-dev"
+$env:HYDRA_MCP_ADMIN_TOKEN = "dev"
+uv run --directory proxy hydra-mcp serve --reload
+```
+
+In the second, run `npm.cmd --prefix admin run dev` and open the printed
+local URL at `/admin/`. For the standalone proxy or demo, use the first
+terminal's environment and run `uv run --directory proxy hydra-mcp serve`
+or `uv run --directory proxy hydra-mcp demo`.
+
+Run the pre-PR checks from the root:
+
+```powershell
+uv run --directory proxy ruff check .
+uv run --directory proxy ruff format --check .
+uv run --directory proxy pytest -q
+npm.cmd --prefix admin run typecheck
+npm.cmd --prefix admin run build
+```
+
+To apply formatting, run `uv run --directory proxy ruff format .` followed by
+`uv run --directory proxy ruff check --fix .`. To package the freshly built
+admin page, mirror the build into the generated package directory and build
+the distributions:
+
+```powershell
+robocopy admin/dist proxy/src/hydra_mcp/web /MIR
+if ($LASTEXITCODE -ge 8) { throw "Could not copy the admin build" }
+uv build --directory proxy
+```
+
+With Docker installed, the image build is `docker build -t hydra-mcp:dev .`.
+
 ## Checks
 
 Run before every pull request; CI runs the same:
